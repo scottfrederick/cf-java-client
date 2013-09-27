@@ -54,6 +54,67 @@
 		<profile>
 			<id>integration-test</id>
 		</profile>
+		<profile>
+			<id>specs</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<useFile>false</useFile>
+							<includes>
+								<include>**/*Spec.java</include>
+							</includes>
+							<excludes>
+								<exclude>**/*Test.java</exclude>
+							</excludes>
+						</configuration>
+					</plugin>
+
+					<plugin>
+						<groupId>org.codehaus.gmaven</groupId>
+						<artifactId>gmaven-plugin</artifactId>
+						<version>1.4</version>
+						<configuration>
+							<providerSelection>2.0</providerSelection>
+						</configuration>
+						<executions>
+							<execution>
+								<goals>
+									<goal>compile</goal>
+									<goal>testCompile</goal>
+								</goals>
+							</execution>
+						</executions>
+						<dependencies>
+							<dependency>
+								<groupId>org.codehaus.gmaven.runtime</groupId>
+								<artifactId>gmaven-runtime-2.0</artifactId>
+								<version>1.4</version>
+								<exclusions>
+									<exclusion>
+										<groupId>org.codehaus.groovy</groupId>
+										<artifactId>groovy-all</artifactId>
+									</exclusion>
+								</exclusions>
+							</dependency>
+							<dependency>
+								<groupId>org.codehaus.groovy</groupId>
+								<artifactId>groovy-all</artifactId>
+								<version>2.1.5</version>
+							</dependency>
+						</dependencies>
+					</plugin>
+
+					<!--<plugin>-->
+						<!--<groupId>org.codehaus.gmaven</groupId>-->
+						<!--<artifactId>groovy-maven-plugin</artifactId>-->
+						<!--<version>2.0</version>-->
+					<!--</plugin>-->
+				</plugins>
+			</build>
+		</profile>
 
 		<!-- tools classes are needed by byteman, and their path is system-dependent,
 		one of those profiles will be active, in addition to profile controlling which tests are executed -->
@@ -181,6 +242,14 @@
 			<version>${byteman.version}</version>
 			<scope>test</scope>
 		</dependency>
+
+		<dependency>
+			<groupId>org.spockframework</groupId>
+			<artifactId>spock-core</artifactId>
+			<version>0.7-groovy-2.0</version>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>com.sun</groupId>
 			<artifactId>tools</artifactId>
@@ -255,6 +324,7 @@
 						<include>**/*Test.java</include>
 					</includes>
 					<excludes>
+						<exclude>**/CloudFoundryClientTest.java</exclude>
 						<exclude>**/Abstract*.java</exclude>
 					</excludes>
 				</configuration>
@@ -292,7 +362,7 @@
 				</executions>
 			</plugin>
 
-			<!-- Used to syntaxically verify our byteman rules that detect unexpected direct sockets not going through proxy -->
+			<!-- Used to syntactically verify our byteman rules that detect unexpected direct sockets not going through proxy -->
 			<plugin>
 				<groupId>org.jboss.byteman</groupId>
 				<artifactId>byteman-rulecheck-maven-plugin</artifactId>
