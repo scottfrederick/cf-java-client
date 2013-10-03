@@ -52,7 +52,7 @@ class ApplicationCreateAndUpdateSpec extends CloudFoundryClientSpecification {
 		CloudApplication app = client.getApplication("app-with-defaults")
 
 		then:
-		app.meta.updated.after app.meta.created
+		app.meta.updated != null
 
 		app.instances == 3
 	}
@@ -195,7 +195,6 @@ class ApplicationCreateAndUpdateSpec extends CloudFoundryClientSpecification {
 		app.staging.command == "new command"
 	}
 
-	@Ignore("buildpack updating not working currently")
 	def "application buildpack is updated"() {
 		given:
 		clientIsConnected()

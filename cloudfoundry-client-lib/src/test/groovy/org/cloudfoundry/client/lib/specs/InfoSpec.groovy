@@ -22,8 +22,7 @@ class InfoSpec extends CloudFoundryClientSpecification {
 		info.name != null
 		info.support != null
 		info.authorizationEndpoint != null
-		// todo: fix parsing of build
-		// info.build > 0
+		info.build > 0
 	}
 
 	def "limits are available"() {
