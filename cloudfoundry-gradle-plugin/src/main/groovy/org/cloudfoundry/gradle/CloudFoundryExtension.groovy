@@ -40,8 +40,13 @@ class CloudFoundryExtension {
     int instances = 1
     String uri
     List<String> uris = []
+    String host
+    List<String> hosts
+    String domain
     File file
     Map<String, String> env = [:]
+
+    List<String> versions = []
 
     boolean useSystemProxy = true
 
@@ -54,7 +59,27 @@ class CloudFoundryExtension {
         if (uri) {
             allUris << uri.toString()
         }
+        if (domain) {
+            if (host) {
+                allUris << "${host}.${domain}".toString()
+            }
+            if (hosts) {
+                allUris += hosts.collect { "${it}.${domain}".toString() }
+            }
+        }
         allUris as List<String>
+    }
+
+    public void applyVersionSuffix(String version) {
+        application = application + version
+
+        if (host) {
+            host = host + version
+        }
+
+        if (hosts) {
+            hosts = hosts.collect { it + version }
+        }
     }
 
     protected String getRandomWord() {

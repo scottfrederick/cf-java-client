@@ -18,32 +18,33 @@ package org.cloudfoundry.gradle.tasks
 import org.gradle.api.tasks.TaskAction
 
 /**
- * Task used to add a service.
+ * Tasks used to push an application to a Cloud Foundry cloud.
  *
  * @author Cedric Champeau
  * @author Scott Frederick
  */
 @Mixin(ServiceCloudFoundryHelper)
-class CreateServiceCloudFoundryTask extends AbstractCloudFoundryTask {
-    CreateServiceCloudFoundryTask() {
+@Mixin(PushCloudFoundryHelper)
+@Mixin(StartCloudFoundryHelper)
+class PushCloudFoundryTask extends AbstractCloudFoundryTask {
+    PushCloudFoundryTask() {
         super()
-        description = 'Creates a service, optionally binding it to an application'
+        description = 'Pushes an application'
     }
 
     @TaskAction
-    void createService() {
+    void push() {
         withCloudFoundryClient {
+            validateApplicationConfig()
+
             createServices(serviceInfos)
 
-            withApplicationIfExists {
-                client.getApplication(application)
+            createApplication()
 
-                serviceInfos.each { service ->
-                    if (service.bind) {
-                        log "Binding service ${service.name} to application ${application}"
-                        client.bindService(application, service.name)
-                    }
-                }
+            uploadApplication()
+
+            if (startApp) {
+                startApplication()
             }
         }
     }

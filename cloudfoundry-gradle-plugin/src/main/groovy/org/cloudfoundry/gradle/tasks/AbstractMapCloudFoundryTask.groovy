@@ -20,7 +20,22 @@ abstract class AbstractMapCloudFoundryTask extends AbstractCloudFoundryTask {
         super()
     }
 
-    protected def modifyUris(Closure c) {
+    protected List<String> mapUrisToApplication() {
+        def applicationUris = updateApplicationUris { existingUris, passedUris ->
+            existingUris + passedUris
+        }
+        applicationUris
+    }
+
+
+    protected List<String> unmapUrisFromApplication() {
+        def applicationUris = updateApplicationUris { existingUris, passedUris ->
+            existingUris - passedUris
+        }
+        applicationUris
+    }
+
+    protected def updateApplicationUris(Closure c) {
         def app = client.getApplication(application)
         def applicationUris = c.call(app.uris, allUris.collect { it as String }).unique()
         client.updateApplicationUris(application, applicationUris)
