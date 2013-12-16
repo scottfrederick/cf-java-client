@@ -36,7 +36,7 @@ class StartApplicationCloudFoundryTask extends AbstractCloudFoundryTask {
                 if (app.runningInstances > 0) {
                     log "Application ${application} is already started"
                 } else {
-                    startApplication(application)
+                    startApplication()
                 }
             }
         }
