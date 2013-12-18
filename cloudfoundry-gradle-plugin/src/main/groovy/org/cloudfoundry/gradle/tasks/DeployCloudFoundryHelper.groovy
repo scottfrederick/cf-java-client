@@ -21,31 +21,55 @@ import org.gradle.api.GradleException
 class DeployCloudFoundryHelper {
     void validateVersionsForDeploy() {
         if (!versions || versions.size() < 2) {
-            throw new GradleException("At least two version suffixes must be specified.")
+            throw new GradleException("At least two 'versions' suffixes must be specified.")
         }
     }
 
-    List<String> findMappedVersions(String appName, List<CloudApplication> runningApps) {
+    String findNextVersionToDeploy(String appName, List<CloudApplication> apps) {
+        versions.reverse().find { String version ->
+            boolean notUsed = !apps.any { app -> appHasDecoratedName(app, appName, version) }
+            boolean usedButUnmapped = apps.any { app -> appVersionExistsAndUnmapped(app, appName, version) }
+            notUsed || usedButUnmapped
+        }
+    }
+
+    List<String> findMappedVersions(String appName, List<CloudApplication> apps) {
         def appNames = []
 
-        versions.each { version ->
-            appNames += runningApps.findAll { app ->
-                app.name == appName + version && app.uris.containsAll(allUris)
-            }.collect { app -> app.name }
+        versions.each { String version ->
+            appNames += apps.findAll { app ->
+                appVersionExistsAndMapped(app, appName, version)
+            }.collect { app ->
+                app.name
+            }
         }
 
         appNames
     }
 
-    List<String> findUnmappedVersions(String appName, List<CloudApplication> runningApps) {
+    List<String> findUnmappedVersions(String appName, List<CloudApplication> apps) {
         def appNames = []
 
-        versions.each { version ->
-            appNames += runningApps.findAll { app ->
-                app.name == appName + version && app.uris.disjoint(allUris)
-            }.collect { app -> app.name }
+        versions.each { String version ->
+            appNames += apps.findAll { app ->
+                appVersionExistsAndUnmapped(app, appName, version)
+            }.collect { app ->
+                app.name
+            }
         }
 
         appNames
+    }
+
+    boolean appVersionExistsAndMapped(CloudApplication app, String appName, String version) {
+        appHasDecoratedName(app, appName, version) && app.uris.containsAll(allUris)
+    }
+
+    boolean appVersionExistsAndUnmapped(CloudApplication app, String appName, String version) {
+        appHasDecoratedName(app, appName, version) && app.uris.disjoint(allUris)
+    }
+
+    boolean appHasDecoratedName(CloudApplication app, String appName, String version) {
+        app.name == appName + version
     }
 }

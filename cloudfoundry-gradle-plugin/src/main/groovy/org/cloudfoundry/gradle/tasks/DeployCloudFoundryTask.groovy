@@ -39,15 +39,22 @@ class DeployCloudFoundryTask extends AbstractCloudFoundryTask {
             validateApplicationConfig()
             validateVersionsForDeploy()
 
-            def (String current, String next) = findCurrentAndNext(application)
-            String currentAppName = application + current
+            def apps = client.applications
+
+            String next = findNextVersionToDeploy(application, apps)
+
+            List<String> mappedAppVersions = findMappedVersions(application, apps)
+
+            if (!next) {
+                throw new GradleException("All versions are active, none available for deployment")
+            }
 
             project.cloudfoundry.applyVersionSuffix(next)
 
-            if (current)
-                log "Currently deployed version is ${currentAppName}, deploying ${application}"
+            if (mappedAppVersions)
+                log "Currently active versions are ${mappedAppVersions}, deploying ${application}"
             else
-                log "No version currently deployed, deploying ${application}"
+                log "No currently active versions, deploying ${application}"
 
             createServices(serviceInfos)
 
@@ -58,31 +65,6 @@ class DeployCloudFoundryTask extends AbstractCloudFoundryTask {
             if (startApp) {
                 startApplication()
             }
-        }
-    }
-
-    private String[] findCurrentAndNext(String appName) {
-        def runningVersions = []
-        def runningApps = client.applications
-
-        versions.eachWithIndex { version, index ->
-            if (runningApps.any { app -> app.name == appName + version }) {
-                runningVersions << index
-            }
-        }
-
-        if (runningVersions.size() > 1) {
-            throw new GradleException("More than one of the configured versions are currently in use " +
-                    "(${runningVersions.collect { index -> appName + versions[index]}}). " +
-                    "Only one of the configured versions should be active.")
-        }
-
-        if (runningVersions.size() == 0) {
-            [null, versions[0]]
-        } else {
-            int currentIndex = runningVersions[0]
-            int nextIndex = (currentIndex + 1 == versions.size() ? 0 : currentIndex + 1)
-            [versions[currentIndex], versions[nextIndex]]
         }
     }
 }

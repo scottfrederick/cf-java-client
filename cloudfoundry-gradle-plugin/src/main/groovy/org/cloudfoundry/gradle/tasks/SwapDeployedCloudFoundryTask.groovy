@@ -36,10 +36,10 @@ class SwapDeployedCloudFoundryTask extends AbstractMapCloudFoundryTask {
         withCloudFoundryClient {
             validateVersionsForDeploy()
 
-            List<CloudApplication> runningApps = client.applications
+            List<CloudApplication> apps = client.applications
 
-            List<String> mappedAppVersions = findMappedVersions(application, runningApps)
-            List<String> unmappedAppVersions = findUnmappedVersions(application, runningApps)
+            List<String> mappedAppVersions = findMappedVersions(application, apps)
+            List<String> unmappedAppVersions = findUnmappedVersions(application, apps)
 
             if (unmappedAppVersions) {
                 log "Mapping URIs ${allUris} for ${unmappedAppVersions}"
