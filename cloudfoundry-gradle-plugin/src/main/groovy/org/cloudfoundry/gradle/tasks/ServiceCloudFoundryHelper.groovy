@@ -22,7 +22,7 @@ import org.cloudfoundry.gradle.CloudFoundryServiceExtension
 
 class ServiceCloudFoundryHelper {
     void createServices(def services) {
-        services.each { service ->
+        services.each { CloudFoundryServiceExtension service ->
             createService(service)
         }
     }

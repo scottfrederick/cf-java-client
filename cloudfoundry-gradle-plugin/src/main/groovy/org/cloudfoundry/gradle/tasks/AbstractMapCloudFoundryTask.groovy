@@ -15,6 +15,8 @@
 
 package org.cloudfoundry.gradle.tasks
 
+import org.cloudfoundry.client.lib.domain.CloudApplication
+
 abstract class AbstractMapCloudFoundryTask extends AbstractCloudFoundryTask {
     AbstractMapCloudFoundryTask() {
         super()
@@ -24,7 +26,7 @@ abstract class AbstractMapCloudFoundryTask extends AbstractCloudFoundryTask {
         def applicationUris = updateApplicationUris { existingUris, passedUris ->
             existingUris + passedUris
         }
-        applicationUris
+        applicationUris as List<String>
     }
 
 
@@ -32,12 +34,12 @@ abstract class AbstractMapCloudFoundryTask extends AbstractCloudFoundryTask {
         def applicationUris = updateApplicationUris { existingUris, passedUris ->
             existingUris - passedUris
         }
-        applicationUris
+        applicationUris as List<String>
     }
 
-    protected def updateApplicationUris(Closure c) {
-        def app = client.getApplication(application)
-        def applicationUris = c.call(app.uris, allUris.collect { it as String }).unique()
+    protected List<String> updateApplicationUris(Closure c) {
+        CloudApplication app = client.getApplication(application)
+        List<String> applicationUris = c.call(app.uris, allUris.collect { it as String }).unique()
         client.updateApplicationUris(application, applicationUris)
         applicationUris
     }

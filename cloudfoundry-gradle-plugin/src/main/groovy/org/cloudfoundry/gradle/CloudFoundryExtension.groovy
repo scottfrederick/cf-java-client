@@ -54,22 +54,6 @@ class CloudFoundryExtension {
         application = project.name
     }
 
-    public List<String> getAllUris() {
-        def allUris = uris.collect { it.toString() }
-        if (uri) {
-            allUris << uri.toString()
-        }
-        if (domain) {
-            if (host) {
-                allUris << "${host}.${domain}".toString()
-            }
-            if (hosts) {
-                allUris += hosts.collect { "${it}.${domain}".toString() }
-            }
-        }
-        allUris as List<String>
-    }
-
     public void applyVersionSuffix(String version) {
         application = application + version
 

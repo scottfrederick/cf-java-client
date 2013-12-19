@@ -206,7 +206,96 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         spaces.find { it.name.equals(space) }
     }
 
-    protected def propertyMissing(String name) {
+    // extension accessors
+
+    String getTarget() {
+        propertyOrExtension('target')
+    }
+
+    String getOrganization() {
+        propertyOrExtension('organization')
+    }
+
+    String getSpace() {
+        propertyOrExtension('space')
+    }
+
+    String getUsername() {
+        propertyOrExtension('username')
+    }
+
+    String getPassword() {
+        propertyOrExtension('password')
+    }
+
+    String getApplication() {
+        propertyOrExtension('application')
+    }
+
+    String getCommand() {
+        propertyOrExtension('command')
+    }
+
+    String getBuildpack() {
+        propertyOrExtension('buildpack')
+    }
+
+    boolean getStartApp() {
+        propertyOrExtension('startApp')
+    }
+
+    int getMemory() {
+        propertyOrExtension('memory') as int
+    }
+
+    int getInstances() {
+        propertyOrExtension('instances') as int
+    }
+
+    List<String> getAllUris() {
+        String uri = propertyOrExtension('uri')
+        List<String> uris = project.cloudfoundry.uris
+
+        String domain = propertyOrExtension('domain')
+        String host = propertyOrExtension('host')
+        List<String> hosts = project.cloudfoundry.hosts
+
+        def allUris = uris.collect { it.toString() }
+        if (uri) {
+            allUris << uri.toString()
+        }
+        if (domain) {
+            if (host) {
+                allUris << "${host}.${domain}".toString()
+            }
+            if (hosts) {
+                allUris += hosts.collect { "${it}.${domain}".toString() }
+            }
+        }
+        allUris as List<String>
+    }
+
+    File getFile() {
+        project.cloudfoundry.file
+    }
+
+    Map<String, String> getEnv() {
+        project.cloudfoundry.env
+    }
+
+    List<String> getVersions() {
+        project.cloudfoundry.versions
+    }
+
+    boolean getUseSystemProxy() {
+        propertyOrExtension('useSystemProxy')
+    }
+
+    def getServiceInfos() {
+        project.cloudfoundry.services
+    }
+
+    private def propertyOrExtension(String name) {
         if (project.hasProperty('cf.' + name)) {
             project.property('cf.' + name)
         } else {
