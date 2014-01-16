@@ -35,6 +35,8 @@ class CloudFoundryExtension {
     String application
     String command
     String buildpack
+    String stack
+    Integer healthCheckTimeout
     boolean startApp = true
     int memory = 512
     int instances = 1
@@ -47,6 +49,9 @@ class CloudFoundryExtension {
     Map<String, String> env = [:]
 
     List<String> versions = []
+
+    // plugin configuration
+    Integer appStartupTimeout
 
     boolean useSystemProxy = true
 

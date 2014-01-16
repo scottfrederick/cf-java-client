@@ -24,7 +24,7 @@ class PushCloudFoundryHelper {
     void createApplication() {
         log "Creating application ${application}"
 
-        Staging staging = new Staging(command, buildpack)
+        Staging staging = new Staging(command, buildpack, stack, healthCheckTimeout)
         List<String> serviceNames = serviceInfos.collect { it.name }
 
         if (applicationExists(application)) {

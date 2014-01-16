@@ -1,5 +1,6 @@
 package org.cloudfoundry.gradle.tasks
 
+import groovy.time.TimeCategory
 import org.cloudfoundry.client.lib.StartingInfo
 import org.cloudfoundry.client.lib.domain.CloudApplication
 import org.cloudfoundry.client.lib.domain.InstanceInfo
@@ -9,8 +10,6 @@ import org.gradle.api.GradleException
 import org.springframework.http.HttpStatus
 
 class StartCloudFoundryHelper {
-    static final int MAX_STATUS_CHECKS = 60
-
     void startApplication() {
         log "Starting ${application}"
         StartingInfo startingInfo = client.startApplication(application)
@@ -46,7 +45,7 @@ class StartCloudFoundryHelper {
 
         errorHandler.addExpectedStatus(HttpStatus.BAD_REQUEST)
 
-        def statusChecks = 0
+        Date startTimeout = calcStartTimeout()
 
         while (true) {
             List<InstanceInfo> instances = getApplicationInstances(app)
@@ -65,10 +64,11 @@ class StartCloudFoundryHelper {
                     break
             }
 
-            if (statusChecks > MAX_STATUS_CHECKS)
+            Date now = new Date()
+            if (now.after(startTimeout)) {
                 break
+            }
 
-            statusChecks++
             sleep 1000
         }
 
@@ -98,8 +98,11 @@ class StartCloudFoundryHelper {
         def runningInstances = getRunningInstances(instances)
         def flappingInstances = getFlappingInstances(instances)
 
-        if (flappingInstances > 0 || runningInstances == 0) {
+        if (flappingInstances > 0) {
             throw new GradleException("Application ${application} start unsuccessful")
+        }
+        else if (runningInstances == 0) {
+            throw new GradleException("Application ${application} start timed out")
         } else if (runningInstances > 0) {
             List<String> uris = allUris
             if (uris.empty) {
@@ -107,10 +110,6 @@ class StartCloudFoundryHelper {
             } else {
                 log "Application ${application} is available at ${uris.collect{"http://$it"}.join(',')}"
             }
-        }
-
-        if (expectedInstances != runningInstances) {
-            log "TIP: The system will continue to start all requested app instances. Use the 'cf-app' task to monitor app status."
         }
     }
 
@@ -129,5 +128,18 @@ class StartCloudFoundryHelper {
 
     def getFlappingInstances(List<InstanceInfo> instances) {
         instances.count { instance -> instance.state == InstanceState.FLAPPING }
+    }
+
+    def calcStartTimeout() {
+        def startTimeout = new Date()
+        use(TimeCategory) {
+            if (appStartupTimeout)
+                startTimeout += appStartupTimeout.minutes
+            else if (healthCheckTimeout)
+                startTimeout += healthCheckTimeout.minutes
+            else
+                startTimeout += 1.minute
+        }
+        startTimeout
     }
 }

@@ -240,6 +240,14 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         propertyOrExtension('buildpack')
     }
 
+    String getStack() {
+        propertyOrExtension('stack')
+    }
+
+    Integer getHealthCheckTimeout() {
+        propertyOrExtension('healthCheckTimeout')
+    }
+
     boolean getStartApp() {
         propertyOrExtension('startApp')
     }
@@ -287,6 +295,10 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         project.cloudfoundry.versions
     }
 
+    Integer getAppStartupTimeout() {
+        propertyOrExtension('appStartupTimeout')
+    }
+
     boolean getUseSystemProxy() {
         propertyOrExtension('useSystemProxy')
     }
@@ -295,7 +307,7 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         project.cloudfoundry.services
     }
 
-    private def propertyOrExtension(String name) {
+    def propertyOrExtension(String name) {
         if (project.hasProperty('cf.' + name)) {
             project.property('cf.' + name)
         } else {
