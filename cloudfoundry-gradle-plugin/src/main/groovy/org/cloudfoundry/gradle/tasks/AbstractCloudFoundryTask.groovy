@@ -52,14 +52,20 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
     }
 
     protected def withCloudFoundryClient(Closure c, Object[] args) {
-        validateConfiguration()
-        connectToCloudFoundry()
-        if (client) {
-            setupLogging()
+        try {
+            validateConfiguration()
+            connectToCloudFoundry()
+            if (client) {
+                setupLogging()
 
-            c.call(args)
+                c.call(args)
 
-            disconnectFromCloudFoundry()
+                disconnectFromCloudFoundry()
+            }
+        } catch (CloudFoundryException cfe) {
+            throw new GradleException("Error calling Cloud Foundry: ${cfe.message}: ${cfe.description}")
+        } catch (Exception e) {
+            throw e
         }
     }
 
