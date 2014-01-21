@@ -65,6 +65,8 @@ class DeployCloudFoundryTask extends AbstractCloudFoundryTask {
             if (startApp) {
                 startApplication()
             }
+
+            project.cloudfoundry.removeVersionSuffix(next)
         }
     }
 }

@@ -66,7 +66,7 @@ class StartCloudFoundryHelper {
 
             Date now = new Date()
             if (now.after(startTimeout)) {
-                break
+                throw new GradleException("Application ${application} start timed out")
             }
 
             sleep 1000
@@ -94,15 +94,15 @@ class StartCloudFoundryHelper {
     void showStartResults(CloudApplication app) {
         List<InstanceInfo> instances = getApplicationInstances(app)
 
-        def expectedInstances = getExpectedInstances(instances)
+        if (!instances) {
+            throw new GradleException("Application ${application} start unsuccessful")
+        }
+
         def runningInstances = getRunningInstances(instances)
         def flappingInstances = getFlappingInstances(instances)
 
-        if (flappingInstances > 0) {
+        if (flappingInstances > 0 || runningInstances == 0) {
             throw new GradleException("Application ${application} start unsuccessful")
-        }
-        else if (runningInstances == 0) {
-            throw new GradleException("Application ${application} start timed out")
         } else if (runningInstances > 0) {
             List<String> uris = allUris
             if (uris.empty) {
@@ -136,9 +136,9 @@ class StartCloudFoundryHelper {
             if (appStartupTimeout)
                 startTimeout += appStartupTimeout.minutes
             else if (healthCheckTimeout)
-                startTimeout += healthCheckTimeout.minutes
+                startTimeout += healthCheckTimeout.seconds
             else
-                startTimeout += 1.minute
+                startTimeout += 5.minutes
         }
         startTimeout
     }

@@ -71,6 +71,18 @@ class CloudFoundryExtension {
         }
     }
 
+    public void removeVersionSuffix(String version) {
+        application = application - version
+
+        if (host) {
+            host = host - version
+        }
+
+        if (hosts) {
+            hosts = hosts.collect { it - version }
+        }
+    }
+
     protected String getRandomWord() {
         def generator = { String alphabet, int n ->
             new Random().with {

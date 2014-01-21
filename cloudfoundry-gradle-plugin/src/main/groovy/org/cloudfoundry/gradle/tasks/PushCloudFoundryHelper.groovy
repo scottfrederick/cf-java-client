@@ -22,18 +22,19 @@ import org.springframework.http.HttpStatus
 
 class PushCloudFoundryHelper {
     void createApplication() {
-        log "Creating application ${application}"
 
         Staging staging = new Staging(command, buildpack, stack, healthCheckTimeout)
         List<String> serviceNames = serviceInfos.collect { it.name }
 
         if (applicationExists(application)) {
+            log "Updating application ${application}"
             client.stopApplication(application)
             client.updateApplicationStaging(application, staging)
             client.updateApplicationMemory(application, memory)
             client.updateApplicationUris(application, allUris)
             client.updateApplicationServices(application, serviceNames)
         } else {
+            log "Creating application ${application}"
             client.createApplication(application, staging, memory, allUris, serviceNames)
         }
 
