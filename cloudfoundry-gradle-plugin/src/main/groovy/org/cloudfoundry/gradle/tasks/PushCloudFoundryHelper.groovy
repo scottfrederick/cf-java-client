@@ -70,8 +70,8 @@ class PushCloudFoundryHelper {
     }
 
     void ensureFileExists() {
-        if (!file || !file.isFile()) {
-            throw new GradleException("You must specify a valid file ('${file}' is not valid)")
+        if (!file) {
+            throw new GradleException("You must specify a valid file or directory ('${file}' is not valid)")
         }
     }
 
