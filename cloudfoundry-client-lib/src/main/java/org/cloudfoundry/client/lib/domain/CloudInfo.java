@@ -18,12 +18,6 @@ package org.cloudfoundry.client.lib.domain;
 
 import org.cloudfoundry.client.lib.util.CloudUtil;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,18 +32,19 @@ public class CloudInfo {
 	private Usage usage;
 	private String name;
 	private String support;
-	private Integer build;
+	private String build;
 	private String version;
 	private String user;
 	private String description;
 	private String authorizationEndpoint;
 	private boolean allowDebug;
+    private String loggregatorEndpoint;
 
 	@SuppressWarnings("unchecked")
 	public CloudInfo(Map<String, Object> infoMap) {
 		name = CloudUtil.parse(String.class, infoMap.get("name"));
 		support = CloudUtil.parse(String.class, infoMap.get("support"));
-		build = CloudUtil.parse(Integer.class, infoMap.get("build"));
+		build = CloudUtil.parse(String.class, infoMap.get("build"));
 		version = CloudUtil.parse(String.class, infoMap.get("version"));
 		if (version == null) {
 			Number iVersion = CloudUtil.parse(Number.class, infoMap.get("version"));
@@ -60,6 +55,7 @@ public class CloudInfo {
 		user = CloudUtil.parse(String.class, infoMap.get("user"));
 		description = CloudUtil.parse(String.class, infoMap.get("description"));
 		authorizationEndpoint = CloudUtil.parse(String.class, infoMap.get("authorization_endpoint"));
+		loggregatorEndpoint = CloudUtil.parse(String.class, infoMap.get("logging_endpoint"));
 
 		Object allowDebugValue = infoMap.get("allow_debug");
 		if (allowDebugValue != null) {
@@ -83,11 +79,12 @@ public class CloudInfo {
 		}
 	}
 
-	public CloudInfo(String name, String support, String authorizationEndpoint, int build, String version,
-			String user, String description, Limits limits, Usage usage, boolean allowDebug) {
+	public CloudInfo(String name, String support, String authorizationEndpoint, String build, String version,
+			String user, String description, Limits limits, Usage usage, boolean allowDebug, String loggregatorEndpoint) {
 		this.name = name;
 		this.support = support;
 		this.authorizationEndpoint = authorizationEndpoint;
+        this.loggregatorEndpoint = loggregatorEndpoint;
 		this.build = build;
 		this.version = version;
 		this.user = user;
@@ -116,8 +113,12 @@ public class CloudInfo {
 	public String getAuthorizationEndpoint() {
 		return authorizationEndpoint;
 	}
+	
+	public String getLoggregatorEndpoint() {
+	    return loggregatorEndpoint;
+	}
 
-	public Integer getBuild() {
+	public String getBuild() {
 		return build;
 	}
 
@@ -180,12 +181,12 @@ public class CloudInfo {
 		private int services;
 
 		public Usage(Map<String, Object> data) {
-            if(data != null && !data.isEmpty()) {
-                apps = CloudUtil.parse(Integer.class, data.get("apps"));
-                totalMemory = CloudUtil.parse(Integer.class,  data.get("memory"));
-                urisPerApp = CloudUtil.parse(Integer.class,  data.get("app_uris"));
-                services = CloudUtil.parse(Integer.class,  data.get("services"));
-            }
+			if (data != null && !data.isEmpty()) {
+				apps = CloudUtil.parse(Integer.class, data.get("apps"));
+				totalMemory = CloudUtil.parse(Integer.class, data.get("memory"));
+				urisPerApp = CloudUtil.parse(Integer.class, data.get("app_uris"));
+				services = CloudUtil.parse(Integer.class, data.get("services"));
+			}
 		}
 
 		Usage() {

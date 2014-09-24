@@ -17,11 +17,14 @@ package org.cloudfoundry.maven;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
 import java.io.File;
 
 import org.apache.maven.plugin.testing.AbstractMojoTestCase;
+import org.cloudfoundry.client.lib.CloudFoundryClient;
+import org.cloudfoundry.client.lib.domain.CloudDomain;
 import org.cloudfoundry.maven.common.SystemProperties;
 
 /**
@@ -57,15 +60,18 @@ public class CheckDefaultParametersMojosTest extends AbstractMojoTestCase {
 		setVariableValueToObject( mojo, "artifactId", "cf-maven-tests" );
 		setVariableValueToObject( mojo, "artifact", "someGAV");
 
+		CloudFoundryClient client = mock(CloudFoundryClient.class);
+		doReturn(new CloudDomain(null, "apps.cloudfoundry.com", null)).when(client).getDefaultDomain();
+		doReturn(client).when(mojo).getClient();
+
 		doReturn(null).when(mojo).getCommandlineProperty(any(SystemProperties.class));
 
 		assertEquals("cf-maven-tests", mojo.getAppname());
-		assertEquals(Integer.valueOf(512), mojo.getMemory());
+		assertNull(mojo.getMemory());
 		assertNull("Password by default is null.", mojo.getPassword());
 		assertEquals("cloud-foundry-credentials", mojo.getServer());
 		assertTrue(mojo.getServices().isEmpty());
 		assertNull("Target Url is not backed by a default value.", mojo.getTarget());
-		assertEquals("cf-maven-tests.<undefined target>", mojo.getUrl());
 		assertNull("Username by default is null.", mojo.getUsername());
 	}
 }

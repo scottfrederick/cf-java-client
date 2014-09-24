@@ -24,22 +24,25 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.cloudfoundry.client.lib.archive.ApplicationArchive;
+import org.cloudfoundry.client.lib.domain.ApplicationLog;
 import org.cloudfoundry.client.lib.domain.ApplicationStats;
 import org.cloudfoundry.client.lib.domain.CloudApplication;
 import org.cloudfoundry.client.lib.domain.CloudApplication.DebugMode;
 import org.cloudfoundry.client.lib.domain.CloudDomain;
 import org.cloudfoundry.client.lib.domain.CloudInfo;
 import org.cloudfoundry.client.lib.domain.CloudOrganization;
+import org.cloudfoundry.client.lib.domain.CloudQuota;
 import org.cloudfoundry.client.lib.domain.CloudRoute;
 import org.cloudfoundry.client.lib.domain.CloudService;
+import org.cloudfoundry.client.lib.domain.CloudServiceBroker;
 import org.cloudfoundry.client.lib.domain.CloudServiceOffering;
 import org.cloudfoundry.client.lib.domain.CloudSpace;
+import org.cloudfoundry.client.lib.domain.CloudStack;
 import org.cloudfoundry.client.lib.domain.CrashesInfo;
 import org.cloudfoundry.client.lib.domain.InstancesInfo;
 import org.cloudfoundry.client.lib.domain.Staging;
 import org.cloudfoundry.client.lib.rest.CloudControllerClient;
 import org.cloudfoundry.client.lib.rest.CloudControllerClientFactory;
-import org.cloudfoundry.client.lib.util.RestUtil;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 import org.springframework.util.Assert;
 import org.springframework.web.client.ResponseErrorHandler;
@@ -52,6 +55,7 @@ import org.springframework.web.client.ResponseErrorHandler;
  * @author Jennifer Hickey
  * @author Dave Syer
  * @author Thomas Risberg
+ * @author Alexander Orlov
  */
 public class CloudFoundryClient implements CloudFoundryOperations {
 
@@ -62,48 +66,104 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 	/**
 	 * Construct client for anonymous user. Useful only to get to the '/info' endpoint.
 	 */
+
 	public CloudFoundryClient(URL cloudControllerUrl) {
-		this(null, cloudControllerUrl);
+		this(null, cloudControllerUrl, null, (HttpProxyConfiguration) null, false);
 	}
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl) {
-		this(credentials, cloudControllerUrl, (CloudSpace)null);
+	public CloudFoundryClient(URL cloudControllerUrl, boolean trustSelfSignedCerts) {
+		this(null, cloudControllerUrl, null, (HttpProxyConfiguration) null, trustSelfSignedCerts);
 	}
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, CloudSpace sessionSpace) {
-		this(credentials, cloudControllerUrl, sessionSpace, null);
-    }
+	public CloudFoundryClient(URL cloudControllerUrl, HttpProxyConfiguration httpProxyConfiguration) {
+		this(null, cloudControllerUrl, null, httpProxyConfiguration, false);
+	}
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName) {
-		this(credentials, cloudControllerUrl, orgName, spaceName, null);
-    }
+	public CloudFoundryClient(URL cloudControllerUrl, HttpProxyConfiguration httpProxyConfiguration,
+	                          boolean trustSelfSignedCerts) {
+		this(null, cloudControllerUrl, null, httpProxyConfiguration, trustSelfSignedCerts);
+	}
 
 	/**
-	 * Constructors to use with an http proxy configuration.
+	 * Construct client without a default org and space.
 	 */
-	public CloudFoundryClient(URL cloudControllerUrl, HttpProxyConfiguration httpProxyConfiguration) {
-		this(null, cloudControllerUrl, httpProxyConfiguration);
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl) {
+		this(credentials, cloudControllerUrl, null, (HttpProxyConfiguration) null, false);
 	}
 
 	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl,
-							  HttpProxyConfiguration httpProxyConfiguration) {
-		this(credentials, cloudControllerUrl, null, httpProxyConfiguration);
+	                          boolean trustSelfSignedCerts) {
+		this(credentials, cloudControllerUrl, null, (HttpProxyConfiguration) null, trustSelfSignedCerts);
 	}
 
 	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl,
-							  CloudSpace sessionSpace, HttpProxyConfiguration httpProxyConfiguration) {
-		Assert.notNull(cloudControllerUrl, "URL for cloud controller cannot be null");
-		CloudControllerClientFactory cloudControllerClientFactory =
-				new CloudControllerClientFactory(new RestUtil(), httpProxyConfiguration);
-		this.cc = cloudControllerClientFactory.newCloudController(cloudControllerUrl, credentials, sessionSpace);
+	                          HttpProxyConfiguration httpProxyConfiguration) {
+		this(credentials, cloudControllerUrl, null, httpProxyConfiguration, false);
+	}
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl,
+	                          HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
+		this(credentials, cloudControllerUrl, null, httpProxyConfiguration, trustSelfSignedCerts);
+	}
+
+	/**
+	 * Construct a client with a default CloudSpace.
+	 */
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, CloudSpace sessionSpace) {
+		this(credentials, cloudControllerUrl, sessionSpace, null, false);
     }
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl,
-							  String orgName, String spaceName, HttpProxyConfiguration httpProxyConfiguration) {
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, CloudSpace sessionSpace,
+	                          boolean trustSelfSignedCerts) {
+		this(credentials, cloudControllerUrl, sessionSpace, null, trustSelfSignedCerts);
+	}
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, CloudSpace sessionSpace,
+	                          HttpProxyConfiguration httpProxyConfiguration) {
+		this(credentials, cloudControllerUrl, sessionSpace, httpProxyConfiguration, false);
+	}
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, CloudSpace sessionSpace,
+	                          HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
 		Assert.notNull(cloudControllerUrl, "URL for cloud controller cannot be null");
 		CloudControllerClientFactory cloudControllerClientFactory =
-				new CloudControllerClientFactory(new RestUtil(), httpProxyConfiguration);
+				new CloudControllerClientFactory(httpProxyConfiguration, trustSelfSignedCerts);
+		this.cc = cloudControllerClientFactory.newCloudController(cloudControllerUrl, credentials, sessionSpace);
+	}
+
+	/**
+	 * Construct a client with a default space name and org name.
+	 */
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName) {
+		this(credentials, cloudControllerUrl, orgName, spaceName, null, false);
+	}
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName,
+	                          boolean trustSelfSignedCerts) {
+		this(credentials, cloudControllerUrl, orgName, spaceName, null, trustSelfSignedCerts);
+	}
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName,
+							  HttpProxyConfiguration httpProxyConfiguration) {
+		this(credentials, cloudControllerUrl, orgName, spaceName, httpProxyConfiguration, false);
+	}
+
+	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName,
+	                          HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
+		Assert.notNull(cloudControllerUrl, "URL for cloud controller cannot be null");
+		CloudControllerClientFactory cloudControllerClientFactory =
+				new CloudControllerClientFactory(httpProxyConfiguration, trustSelfSignedCerts);
 		this.cc = cloudControllerClientFactory.newCloudController(cloudControllerUrl, credentials, orgName, spaceName);
+	}
+
+	/**
+	 * Construct a client with a pre-configured CloudControllerClient
+	 */
+	public CloudFoundryClient(CloudControllerClient cc) {
+		this.cc = cc;
 	}
 
 	public void setResponseErrorHandler(ResponseErrorHandler errorHandler) {
@@ -169,17 +229,27 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		return cc.getApplicationStats(appName);
 	}
 
-	public int[] getApplicationMemoryChoices() {
-		return cc.getApplicationMemoryChoices();
-	}
-
-	public void createApplication(String appName, Staging staging, int memory, List<String> uris,
+	public void createApplication(String appName, Staging staging, Integer memory, List<String> uris,
 								  List<String> serviceNames) {
 		cc.createApplication(appName, staging, memory, uris, serviceNames);
 	}
 
+	public void createApplication(String appName, Staging staging, Integer disk, Integer memory, List<String> uris,
+								  List<String> serviceNames) {
+		cc.createApplication(appName, staging, disk, memory, uris, serviceNames);
+	}
+
 	public void createService(CloudService service) {
 		cc.createService(service);
+	}
+
+	public void createUserProvidedService(CloudService service, Map<String, Object> credentials) {
+		cc.createUserProvidedService(service, credentials);
+	}
+
+	@Override
+	public List<CloudRoute> deleteOrphanedRoutes() {
+    	return cc.deleteOrphanedRoutes();
 	}
 
 	public void uploadApplication(String appName, String file) throws IOException {
@@ -230,6 +300,10 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		cc.deleteAllServices();
 	}
 
+	public void updateApplicationDiskQuota(String appName, int disk) {
+		cc.updateApplicationDiskQuota(appName, disk);
+	}
+
 	public void updateApplicationMemory(String appName, int memory) {
 		cc.updateApplicationMemory(appName, memory);
 	}
@@ -258,14 +332,28 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		cc.updateApplicationEnv(appName, env);
 	}
 
+	/**
+	 * @deprecated use {@link #streamLogs(String, ApplicationLogListener)} or {@link #getRecentLogs(String)}
+	 */
 	public Map<String, String> getLogs(String appName) {
 		return cc.getLogs(appName);
 	}
 
+	public StreamingLogToken streamLogs(String appName, ApplicationLogListener listener) {
+	    return cc.streamLogs(appName, listener);
+	}
+
+	public List<ApplicationLog> getRecentLogs(String appName) {
+		return cc.getRecentLogs(appName);
+	}
+
+	/**
+	 * @deprecated use {@link #streamLogs(String, ApplicationLogListener)} or {@link #getRecentLogs(String)}
+	 */
 	public Map<String, String> getCrashLogs(String appName) {
 		return cc.getCrashLogs(appName);
 	}
-	
+
 	public String getStagingLogs(StartingInfo info, int offset) {
 		return cc.getStagingLogs(info, offset);
 	}
@@ -289,6 +377,10 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		return cc.getFile(appName, instanceIndex, filePath, startPosition, endPosition - 1);
 	}
 
+	public void openFile(String appName, int instanceIndex, String filePath, ClientHttpResponseCallback callback) {
+		cc.openFile(appName, instanceIndex, filePath, callback);
+	}
+
 	public String getFileTail(String appName, int instanceIndex, String filePath, int length) {
 		Assert.isTrue(length > 0, length + " is not a valid value for length, it should be 1 or greater.");
 		return cc.getFile(appName, instanceIndex, filePath, -1, length);
@@ -300,7 +392,33 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		return cc.getServices();
 	}
 
-	public CloudService getService(String service) {
+	public List<CloudServiceBroker> getServiceBrokers() {
+		return cc.getServiceBrokers();
+	}
+
+	public CloudServiceBroker getServiceBroker(String name) {
+		return cc.getServiceBroker(name);
+	}
+
+	public void createServiceBroker(CloudServiceBroker serviceBroker) {
+		cc.createServiceBroker(serviceBroker);
+	}
+
+	public void updateServiceBroker(CloudServiceBroker serviceBroker) {
+		cc.updateServiceBroker(serviceBroker);
+	}
+
+	@Override
+	public void deleteServiceBroker(String name) {
+		cc.deleteServiceBroker(name);
+	}
+
+	@Override
+	public void updateServicePlanVisibilityForBroker(String name, boolean visibility) {
+		cc.updateServicePlanVisibilityForBroker(name, visibility);
+	}
+
+    public CloudService getService(String service) {
 		return cc.getService(service);
 	}
 
@@ -332,6 +450,14 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		return cc.getCrashes(appName);
 	}
 
+	public List<CloudStack> getStacks() {
+		return cc.getStacks();
+	}
+
+	public CloudStack getStack(String name) {
+		return cc.getStack(name);
+	}
+
 	public void rename(String appName, String newName) {
 		cc.rename(appName, newName);
 	}
@@ -340,8 +466,20 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		return cc.getDomainsForOrg();
 	}
 
+	public List<CloudDomain> getPrivateDomains() {
+		return cc.getPrivateDomains();
+	}
+
+	public List<CloudDomain> getSharedDomains() {
+		return cc.getSharedDomains();
+	}
+
 	public List<CloudDomain> getDomains() {
 		return cc.getDomains();
+	}
+
+	public CloudDomain getDefaultDomain() {
+		return cc.getDefaultDomain();
 	}
 
 	public void addDomain(String domainName) {
@@ -368,16 +506,40 @@ public class CloudFoundryClient implements CloudFoundryOperations {
 		cc.deleteRoute(host, domainName);
 	}
 
-	public void updateHttpProxyConfiguration(HttpProxyConfiguration httpProxyConfiguration) {
-		cc.updateHttpProxyConfiguration(httpProxyConfiguration);
-	}
-
 	public void registerRestLogListener(RestLogCallback callBack) {
 		cc.registerRestLogListener(callBack);
 	}
 
 	public void unRegisterRestLogListener(RestLogCallback callBack) {
 		cc.unRegisterRestLogListener(callBack);
+	}
+	
+	public CloudOrganization getOrgByName(String orgName, boolean required){
+    	return cc.getOrgByName(orgName, required);
+    }
+
+	public List<CloudQuota> getQuotas() {
+		return cc.getQuotas();
+	}
+
+	public CloudQuota getQuotaByName(String quotaName, boolean required) {
+		return cc.getQuotaByName(quotaName, required);
+	}
+
+	public void setQuotaToOrg(String orgName, String quotaName) {
+		cc.setQuotaToOrg(orgName, quotaName);
+	}
+
+	public void createQuota(CloudQuota quota) {
+		cc.createQuota(quota);
+	}
+
+	public void deleteQuota(String quotaName) {
+		cc.deleteQuota(quotaName);
+	}
+
+	public void updateQuota(CloudQuota quota, String name) {
+		cc.updateQuota(quota, name);
 	}
 
 }

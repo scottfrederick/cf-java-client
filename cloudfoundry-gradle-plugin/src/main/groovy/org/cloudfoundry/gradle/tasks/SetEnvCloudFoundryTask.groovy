@@ -36,10 +36,12 @@ class SetEnvCloudFoundryTask extends AbstractEnvCloudFoundryTask {
                 CloudApplication app = client.getApplication(application)
 
                 def newEnv = modifyAppEnv(app) { existingEnv, passedEnv ->
-                    existingEnv + passedEnv
+                    existingEnv + passedEnv.collectEntries { key, value -> [(key.toString()): value.toString()] }
                 }
 
-                listEnvironmentVariables(newEnv)
+                if (verboseEnabled) {
+                    listEnvironmentVariables(newEnv)
+                }
             }
         }
     }

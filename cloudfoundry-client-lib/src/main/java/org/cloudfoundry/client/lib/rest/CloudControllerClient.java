@@ -23,21 +23,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.cloudfoundry.client.lib.ApplicationLogListener;
+import org.cloudfoundry.client.lib.ClientHttpResponseCallback;
 import org.cloudfoundry.client.lib.CloudCredentials;
-import org.cloudfoundry.client.lib.HttpProxyConfiguration;
 import org.cloudfoundry.client.lib.RestLogCallback;
 import org.cloudfoundry.client.lib.StartingInfo;
+import org.cloudfoundry.client.lib.StreamingLogToken;
 import org.cloudfoundry.client.lib.UploadStatusCallback;
 import org.cloudfoundry.client.lib.archive.ApplicationArchive;
+import org.cloudfoundry.client.lib.domain.ApplicationLog;
 import org.cloudfoundry.client.lib.domain.ApplicationStats;
 import org.cloudfoundry.client.lib.domain.CloudApplication;
 import org.cloudfoundry.client.lib.domain.CloudDomain;
 import org.cloudfoundry.client.lib.domain.CloudInfo;
 import org.cloudfoundry.client.lib.domain.CloudOrganization;
+import org.cloudfoundry.client.lib.domain.CloudQuota;
 import org.cloudfoundry.client.lib.domain.CloudRoute;
 import org.cloudfoundry.client.lib.domain.CloudService;
+import org.cloudfoundry.client.lib.domain.CloudServiceBroker;
 import org.cloudfoundry.client.lib.domain.CloudServiceOffering;
 import org.cloudfoundry.client.lib.domain.CloudSpace;
+import org.cloudfoundry.client.lib.domain.CloudStack;
 import org.cloudfoundry.client.lib.domain.CrashesInfo;
 import org.cloudfoundry.client.lib.domain.InstancesInfo;
 import org.cloudfoundry.client.lib.domain.Staging;
@@ -81,6 +87,8 @@ public interface CloudControllerClient {
 
 	void createService(CloudService service);
 
+	void createUserProvidedService(CloudService service, Map<String, Object> credentials);
+
 	CloudService getService(String service);
 
 	void deleteService(String service);
@@ -89,7 +97,19 @@ public interface CloudControllerClient {
 
 	List<CloudServiceOffering> getServiceOfferings();
 
-	// App methods
+	List<CloudServiceBroker> getServiceBrokers();
+
+    CloudServiceBroker getServiceBroker(String name);
+
+    void createServiceBroker(CloudServiceBroker serviceBroker);
+
+    void updateServiceBroker(CloudServiceBroker serviceBroker);
+
+    void deleteServiceBroker(String name);
+
+    void updateServicePlanVisibilityForBroker(String name, boolean visibility);
+
+    // App methods
 
 	List<CloudApplication> getApplications();
 
@@ -99,10 +119,11 @@ public interface CloudControllerClient {
 
 	ApplicationStats getApplicationStats(String appName);
 
-	int[] getApplicationMemoryChoices();
+	void createApplication(String appName, Staging staging, Integer memory, List<String> uris,
+	                       List<String> serviceNames);
 
-	void createApplication(String appName, Staging staging, int memory, List<String> uris,
-                           List<String> serviceNames);
+	void createApplication(String appName, Staging staging, Integer disk, Integer memory,
+	                       List<String> uris, List<String> serviceNames);
 
 	void uploadApplication(String appName, File file, UploadStatusCallback callback) throws IOException;
 
@@ -120,6 +141,8 @@ public interface CloudControllerClient {
 
 	void deleteAllApplications();
 
+	void updateApplicationDiskQuota(String appName, int disk);
+
 	void updateApplicationMemory(String appName, int memory);
 
 	void updateApplicationInstances(String appName, int instances);
@@ -136,9 +159,15 @@ public interface CloudControllerClient {
 
 	Map<String, String> getLogs(String appName);
 
+	StreamingLogToken streamLogs(String appName, ApplicationLogListener listener);
+
+	List<ApplicationLog> getRecentLogs(String appName);
+
 	Map<String, String> getCrashLogs(String appName);
 
 	String getFile(String appName, int instanceIndex, String filePath, int startPosition, int endPosition);
+
+	void openFile(String appName, int instanceIndex, String filePath, ClientHttpResponseCallback callback);
 
 	void bindService(String appName, String serviceName);
 
@@ -151,14 +180,25 @@ public interface CloudControllerClient {
 	CrashesInfo getCrashes(String appName);
 
 	void rename(String appName, String newName);
-	
+
 	String getStagingLogs(StartingInfo info, int offset);
 
+	List<CloudStack> getStacks();
+
+	CloudStack getStack(String name);
+
 	// Domains and routes management
+
 
 	List<CloudDomain> getDomainsForOrg();
 
 	List<CloudDomain> getDomains();
+
+	List<CloudDomain> getPrivateDomains();
+
+	List<CloudDomain> getSharedDomains();
+
+	CloudDomain getDefaultDomain();
 
 	void addDomain(String domainName);
 
@@ -172,11 +212,26 @@ public interface CloudControllerClient {
 
 	void deleteRoute(String host, String domainName);
 
-	// Misc. utility methods
+	List<CloudRoute> deleteOrphanedRoutes();
 
-	void updateHttpProxyConfiguration(HttpProxyConfiguration httpProxyConfiguration);
+	// Misc. utility methods
 
 	void registerRestLogListener(RestLogCallback callBack);
 
 	void unRegisterRestLogListener(RestLogCallback callBack);
+
+    // Quota operations
+	CloudOrganization getOrgByName(String orgName, boolean required);
+    
+    List<CloudQuota> getQuotas();
+    
+    CloudQuota getQuotaByName(String quotaName, boolean required);
+    
+    void createQuota(CloudQuota quota);
+    
+    void updateQuota(CloudQuota quota, String name);
+    
+    void deleteQuota(String quotaName);
+    
+    void setQuotaToOrg(String orgName, String quotaName);
 }

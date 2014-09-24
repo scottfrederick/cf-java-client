@@ -25,7 +25,14 @@ public class CloudServiceOffering extends CloudEntity {
 	private String provider;
 	private String version;
 	private String description;
-
+	private boolean active;
+	private boolean bindable;
+	private String url;
+	private String infoUrl;
+	private String uniqueId;
+	private String extra;
+	private String docUrl;
+	
 	private List<CloudServicePlan> cloudServicePlans = new ArrayList<CloudServicePlan>();
 
 	public CloudServiceOffering(Meta meta, String name) {
@@ -38,36 +45,65 @@ public class CloudServiceOffering extends CloudEntity {
 		this.version = version;
 	}
 
-	public String getLabel() {
-		return getName();
+	public CloudServiceOffering(Meta meta, String name, String provider, String version, 
+								String description, boolean active, boolean bindable,
+								String url, String infoUrl, String uniqueId, String extra,
+								String docUrl) {
+		super(meta, name);
+		this.provider = provider;
+		this.version = version;
+		this.description = description;
+		this.active = active;
+		this.bindable = bindable;
+		this.url = url;
+		this.infoUrl = infoUrl;
+		this.uniqueId = uniqueId;
+		this.extra = extra;
+		this.docUrl = docUrl;
 	}
 
-	public void setLabel(String label) {
-		setName(label);
+	public String getLabel() {
+		return getName();
 	}
 
 	public String getDescription() {
 		return description;
 	}
 
-	public void setDescription(String description) {
-		this.description = description;
-	}
-
 	public String getProvider() {
 		return provider;
-	}
-
-	public void setProvider(String provider) {
-		this.provider = provider;
 	}
 
 	public String getVersion() {
 		return version;
 	}
 
-	public void setVersion(String version) {
-		this.version = version;
+	public boolean isActive() {
+		return active;
+	}
+
+	public boolean isBindable() {
+		return bindable;
+	}
+
+	public String getUrl() {
+		return url;
+	}
+
+	public String getInfoUrl() {
+		return infoUrl;
+	}
+
+	public String getUniqueId() {
+		return uniqueId;
+	}
+
+	public String getExtra() {
+		return extra;
+	}
+
+	public String getDocumentationUrl() {
+		return docUrl;
 	}
 
 	public List<CloudServicePlan> getCloudServicePlans() {

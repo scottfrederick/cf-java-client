@@ -19,11 +19,15 @@ import org.cloudfoundry.client.lib.CloudCredentials
 import org.cloudfoundry.client.lib.CloudFoundryClient
 import org.cloudfoundry.client.lib.CloudFoundryException
 import org.cloudfoundry.client.lib.CloudFoundryOperations
+import org.cloudfoundry.client.lib.HttpProxyConfiguration
 import org.cloudfoundry.client.lib.RestLogCallback
 import org.cloudfoundry.client.lib.domain.CloudSpace
 import org.cloudfoundry.client.lib.tokens.TokensFile
 import org.gradle.api.DefaultTask
 import org.cloudfoundry.gradle.GradlePluginRestLogCallback
+import org.gradle.api.Task
+import org.gradle.api.plugins.JavaPlugin
+import org.gradle.api.plugins.WarPlugin
 import org.springframework.http.HttpStatus
 import org.springframework.security.oauth2.common.OAuth2AccessToken
 import org.springframework.web.client.ResourceAccessException
@@ -51,14 +55,20 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
     }
 
     protected def withCloudFoundryClient(Closure c, Object[] args) {
-        validateConfiguration()
-        connectToCloudFoundry()
-        if (client) {
-            setupLogging()
+        try {
+            validateConfiguration()
+            connectToCloudFoundry()
+            if (client) {
+                setupLogging()
 
-            c.call(args)
+                c.call(args)
 
-            disconnectFromCloudFoundry()
+                disconnectFromCloudFoundry()
+            }
+        } catch (CloudFoundryException cfe) {
+            throw new GradleException("Error calling Cloud Foundry: ${cfe.message}: ${cfe.description}")
+        } catch (Exception e) {
+            throw e
         }
     }
 
@@ -82,7 +92,7 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         client.responseErrorHandler = errorHandler
     }
 
-    protected void disconnectFromCloudFoundry() {
+    private void disconnectFromCloudFoundry() {
         try {
             if (username != null && password != null) {
                 client.logout()
@@ -99,7 +109,7 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
             }
 
             CloudCredentials credentials = new CloudCredentials(username, password)
-            CloudFoundryClient localClient = new CloudFoundryClient(credentials, target.toURL(), organization, space)
+            CloudFoundryClient localClient = createClient(credentials)
 
             login(localClient)
 
@@ -109,17 +119,34 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         }
     }
 
-    protected CloudFoundryClient createClientWithToken() {
+    private CloudFoundryClient createClientWithToken() {
         try {
             if (verboseEnabled) {
                 logVerbose "Connecting to '${target}' with stored token"
             }
 
             CloudCredentials credentials = new CloudCredentials(retrieveToken())
-            return new CloudFoundryClient(credentials, target.toURL(), organization, space)
+            return createClient(credentials)
         } catch (MalformedURLException e) {
             throw new GradleException("Incorrect Cloud Foundry target URL '${target}'. Make sure the URL contains a scheme, e.g. http://...", e)
         }
+    }
+
+    private CloudFoundryClient createClient(CloudCredentials credentials) {
+        HttpProxyConfiguration proxyConfiguration = getHttpProxyConfiguration()
+        URL targetUrl = target.toURL()
+        new CloudFoundryClient(credentials, targetUrl, organization, space, proxyConfiguration, trustSelfSignedCerts)
+    }
+
+    private HttpProxyConfiguration getHttpProxyConfiguration() {
+        if (useSystemProxy) {
+            String proxyHost = System.getProperty("http.proxyHost")
+            String proxyPort = System.getProperty("http.proxyPort")
+            if (proxyHost != null && proxyPort != null) {
+                return new HttpProxyConfiguration(proxyHost, Integer.parseInt(proxyPort))
+            }
+        }
+        null
     }
 
     private OAuth2AccessToken retrieveToken() {
@@ -150,7 +177,7 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         }
     }
 
-    protected def setupLogging() {
+    private def setupLogging() {
         if (logger.debugEnabled) {
             RestLogCallback callback = new GradlePluginRestLogCallback(logger)
             client.registerRestLogListener(callback)
@@ -188,15 +215,162 @@ abstract class AbstractCloudFoundryTask extends DefaultTask {
         spaces.find { it.name.equals(space) }
     }
 
-    protected def getServiceInfos() {
-        project.serviceInfos
+    protected void applyVariantSuffix(String variant) {
+        project.cloudfoundry.currentVariant = variant
     }
 
-    protected def propertyMissing(String name) {
-        if (project.hasProperty('cf.' + name)) {
-            project.property('cf.' + name)
-        } else {
-            project.cloudfoundry[name]
+    protected void removeVariantSuffix() {
+        project.cloudfoundry.currentVariant = ""
+    }
+
+    // extension accessors
+
+    String getTarget() {
+        propertyOrExtension('target')
+    }
+
+    String getOrganization() {
+        propertyOrExtension('organization')
+    }
+
+    String getSpace() {
+        propertyOrExtension('space')
+    }
+
+    String getUsername() {
+        propertyOrExtension('username')
+    }
+
+    String getPassword() {
+        propertyOrExtension('password')
+    }
+
+    String getRawApplication() {
+        propertyOrExtension('application')
+    }
+
+    String getApplication() {
+        def appName = propertyOrExtension('application')
+        appName + (project.cloudfoundry.currentVariant ?: "")
+    }
+
+    String getCommand() {
+        propertyOrExtension('command')
+    }
+
+    String getBuildpack() {
+        propertyOrExtension('buildpack')
+    }
+
+    String getStack() {
+        propertyOrExtension('stack')
+    }
+
+    Integer getHealthCheckTimeout() {
+        propertyOrExtension('healthCheckTimeout')
+    }
+
+    boolean getStartApp() {
+        propertyOrExtension('startApp')
+    }
+
+    Integer getDiskQuota() {
+        propertyOrExtension('diskQuota')
+    }
+
+    Integer getMemory() {
+        propertyOrExtension('memory')
+    }
+
+    int getInstances() {
+        propertyOrExtension('instances') as int
+    }
+
+    List<String> getAllUris() {
+        String uri = propertyOrExtension('uri')
+        List<String> uris = project.cloudfoundry.uris
+
+        String domain = propertyOrExtension('domain')
+        String host = propertyOrExtension('host')
+        List<String> hosts = project.cloudfoundry.hosts
+
+        if (!uri && !uris) {
+            if (!domain) {
+                domain = client.defaultDomain.name
+            }
+            if (!hosts && !host) {
+                host = rawApplication
+            }
         }
+
+        def allUris = []
+
+        if (!project.cloudfoundry.currentVariant) {
+            allUris += uris.collect { it.toString() }
+            if (uri) {
+                allUris << uri.toString()
+            }
+        }
+        if (domain) {
+            if (host) {
+                allUris << "${host}${project.cloudfoundry.currentVariant}.${domain}".toString()
+            }
+            if (hosts) {
+                allUris += hosts.collect { "${it}${project.cloudfoundry.currentVariant}.${domain}".toString() }
+            }
+        }
+
+        allUris as List<String>
+    }
+
+    File getFile() {
+        ((project.cloudfoundry.file ?:
+                getDefaultArchiveForTask(WarPlugin.WAR_TASK_NAME)) ?:
+                getDefaultArchiveForTask(JavaPlugin.JAR_TASK_NAME))
+    }
+
+    File getDefaultArchiveForTask(String taskName) {
+        project.tasks.findByName(taskName)?.archivePath
+    }
+
+    Map<String, String> getEnv() {
+        project.cloudfoundry.env.collectEntries { key, value ->
+            [(key.toString()): (value instanceof Closure ? value.call().toString() : value.toString())]
+        }
+    }
+
+    List<String> getVariants() {
+        project.cloudfoundry.variants
+    }
+
+    Integer getAppStartupTimeout() {
+        propertyOrExtension('appStartupTimeout')
+    }
+
+    boolean getUseSystemProxy() {
+        propertyOrExtension('useSystemProxy')
+    }
+
+    boolean getTrustSelfSignedCerts() {
+        propertyOrExtension('trustSelfSignedCerts')
+    }
+
+    def getServiceInfos() {
+        project.cloudfoundry.services
+    }
+
+    def propertyOrExtension(String name) {
+        projectProperty(name) ?: project.cloudfoundry[name]
+    }
+
+    def projectProperty(String name) {
+        def propertyName = 'cf' + name.capitalize()
+        if (project.hasProperty(propertyName)) {
+            def propertyValue = project.property(propertyName)
+            if (!(propertyValue instanceof Task)) {
+                return propertyValue
+            }
+        }
+        null
     }
 }

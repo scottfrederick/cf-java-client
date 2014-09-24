@@ -18,13 +18,18 @@
 package org.cloudfoundry.maven;
 
 import org.apache.maven.plugin.MojoExecutionException;
+import org.cloudfoundry.client.lib.ApplicationLogListener;
 import org.cloudfoundry.client.lib.CloudFoundryException;
+import org.cloudfoundry.client.lib.domain.ApplicationLog;
+import org.cloudfoundry.maven.common.UiUtils;
 import org.springframework.http.HttpStatus;
 
 import java.util.Map;
 
+import static org.cloudfoundry.maven.common.UiUtils.renderApplicationLogEntry;
+
 /**
- * Shows application logs
+ * Streams a tail of application logs
  *
  * @author Ali Moghadam
  * @author Scott Frederick
@@ -42,9 +47,14 @@ public class Logs extends AbstractApplicationAwareCloudFoundryMojo {
 		try {
 			getLog().info(String.format("Getting logs for '%s'", getAppname()));
 
-			final Map<String, String> logs = getClient().getLogs(getAppname());
-			for (Map.Entry<String, String> entry : logs.entrySet()) {
-				getLog().info(String.format("Reading '%s'\n%s", entry.getKey(), entry.getValue()));
+			LoggingListener listener = new LoggingListener();
+			getClient().streamLogs(getAppname(), listener);
+			synchronized (listener) {
+				try {
+					listener.wait();
+				} catch (InterruptedException e) {
+					throw new MojoExecutionException("Interrupted while streaming logs", e);
+				}
 			}
 		} catch (CloudFoundryException e) {
 			if (HttpStatus.NOT_FOUND.equals(e.getStatusCode())) {
@@ -53,6 +63,24 @@ public class Logs extends AbstractApplicationAwareCloudFoundryMojo {
 			} else {
 				throw new MojoExecutionException(String.format("Error getting logs for application '%s'. Error message: '%s'. Description: '%s'",
 						getAppname(), e.getMessage(), e.getDescription()), e);
+			}
+		}
+	}
+
+	private class LoggingListener implements ApplicationLogListener {
+		public void onMessage(ApplicationLog logEntry) {
+			getLog().info(renderApplicationLogEntry(logEntry));
+		}
+
+		public void onError(Throwable e) {
+			synchronized (this) {
+				this.notify();
+			}
+		}
+
+		public void onComplete() {
+			synchronized (this) {
+				this.notify();
 			}
 		}
 	}

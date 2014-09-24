@@ -15,19 +15,25 @@
  */
 package org.cloudfoundry.maven.common;
 
+import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
 import org.cloudfoundry.client.lib.CloudFoundryClient;
+import org.cloudfoundry.client.lib.domain.ApplicationLog;
+import org.cloudfoundry.client.lib.domain.ApplicationStats;
 import org.cloudfoundry.client.lib.domain.CloudApplication;
 import org.cloudfoundry.client.lib.domain.CloudInfo;
 import org.cloudfoundry.client.lib.domain.CloudService;
 import org.cloudfoundry.client.lib.domain.CloudServiceOffering;
 import org.cloudfoundry.client.lib.domain.CloudServicePlan;
+import org.cloudfoundry.client.lib.domain.InstanceStats;
 
 /**
  * Contains utility methods for rendering data to a formatted console output.
@@ -68,13 +74,55 @@ public final class UiUtils {
 	 *     <li>The comma-separated list of Services</li>
 	 * <ul>
 	 */
-	public static String renderCloudApplicationDataAsTable(CloudApplication application) {
+	public static String renderCloudApplicationDataAsTable(CloudApplication application, ApplicationStats stats) {
 		StringBuilder sb = new StringBuilder("\n");
 
-		sb.append(String.format("%s: %s\n", application.getName(), application.getState()));
-		sb.append(String.format("  usage: %sM x %s instance\n", application.getMemory(), application.getInstances()));
-		sb.append(String.format("  urls: %s\n", CommonUtils.collectionToCommaDelimitedString(application.getUris())));
-		sb.append(String.format("  services: %s\n", CommonUtils.collectionToCommaDelimitedString(application.getServices())));
+		sb.append(String.format("application: %s\n", application.getName()));
+		sb.append(String.format("state: %s\n", application.getState()));
+		sb.append(String.format("instances: %d/%d\n", application.getRunningInstances(), application.getInstances()));
+		sb.append(String.format("usage: %s x %s instance\n", formatMBytes(application.getMemory()), application.getInstances()));
+		sb.append(String.format("urls: %s\n", CommonUtils.collectionToCommaDelimitedString(application.getUris())));
+		sb.append(String.format("services: %s\n", CommonUtils.collectionToCommaDelimitedString(application.getServices())));
+
+		Table table = new Table();
+
+		table.getHeaders().put(COLUMN_1, new TableHeader("instance"));
+		table.getHeaders().put(COLUMN_2, new TableHeader("state"));
+		table.getHeaders().put(COLUMN_3, new TableHeader("cpu"));
+		table.getHeaders().put(COLUMN_4, new TableHeader("memory"));
+		table.getHeaders().put(COLUMN_5, new TableHeader("disk"));
+
+		for (InstanceStats instance : stats.getRecords()) {
+			TableRow tableRow = new TableRow();
+
+			String index = instance.getId();
+			table.getHeaders().get(COLUMN_1).updateWidth(String.valueOf(index).length());
+			tableRow.addValue(COLUMN_1, String.valueOf(index));
+
+			String state = instance.getState().toString().toLowerCase();
+			table.getHeaders().get(COLUMN_2).updateWidth(String.valueOf(state).length());
+			tableRow.addValue(COLUMN_2, String.valueOf(state));
+
+			String cpu = String.format("%.2f%%", instance.getUsage().getCpu() * 100);
+			table.getHeaders().get(COLUMN_3).updateWidth(String.valueOf(cpu).length());
+			tableRow.addValue(COLUMN_3, String.valueOf(cpu));
+
+			String memory = String.format("%s of %s",
+					formatBytes(instance.getUsage().getMem()),
+					formatBytes(instance.getMemQuota()));
+			table.getHeaders().get(COLUMN_4).updateWidth(String.valueOf(memory).length());
+			tableRow.addValue(COLUMN_4, String.valueOf(memory));
+
+			String disk = String.format("%s of %s",
+					formatBytes(instance.getUsage().getDisk()),
+					formatBytes(instance.getDiskQuota()));
+			table.getHeaders().get(COLUMN_5).updateWidth(String.valueOf(disk).length());
+			tableRow.addValue(COLUMN_5, String.valueOf(disk));
+
+			table.getRows().add(tableRow);
+		}
+
+		sb.append("\n").append(renderTextTable(table));
 
 		return sb.toString();
 	}
@@ -103,8 +151,10 @@ public final class UiUtils {
 
 		table.getHeaders().put(COLUMN_1, new TableHeader("name"));
 		table.getHeaders().put(COLUMN_2, new TableHeader("status"));
-		table.getHeaders().put(COLUMN_3, new TableHeader("usage"));
-		table.getHeaders().put(COLUMN_4, new TableHeader("url"));
+		table.getHeaders().put(COLUMN_3, new TableHeader("instances"));
+		table.getHeaders().put(COLUMN_4, new TableHeader("memory"));
+		table.getHeaders().put(COLUMN_5, new TableHeader("disk"));
+		table.getHeaders().put(COLUMN_6, new TableHeader("url"));
 
 		Comparator<CloudApplication> nameComparator = new Comparator<CloudApplication>() {
 			public int compare(CloudApplication a, CloudApplication b) {
@@ -125,14 +175,22 @@ public final class UiUtils {
 			table.getHeaders().get(COLUMN_2).updateWidth(status.length());
 			tableRow.addValue(COLUMN_2, status);
 
-			String usage = String.format("%d x %dM", application.getInstances(), application.getMemory());
-			table.getHeaders().get(COLUMN_3).updateWidth(String.valueOf(usage).length());
-			tableRow.addValue(COLUMN_3, String.valueOf(usage));
+			String instances = String.format("%d/%d", application.getRunningInstances(), application.getInstances());
+			table.getHeaders().get(COLUMN_3).updateWidth(String.valueOf(instances).length());
+			tableRow.addValue(COLUMN_3, String.valueOf(instances));
+
+			String memory = formatMBytes(application.getMemory());
+			table.getHeaders().get(COLUMN_4).updateWidth(String.valueOf(memory).length());
+			tableRow.addValue(COLUMN_4, String.valueOf(memory));
+
+			String disk = formatMBytes(application.getDiskQuota());
+			table.getHeaders().get(COLUMN_5).updateWidth(String.valueOf(disk).length());
+			tableRow.addValue(COLUMN_5, String.valueOf(disk));
 
 			String uris = CommonUtils.collectionToCommaDelimitedString(application.getUris());
 
-			table.getHeaders().get(COLUMN_4).updateWidth(uris.length());
-			tableRow.addValue(COLUMN_4, uris);
+			table.getHeaders().get(COLUMN_6).updateWidth(uris.length());
+			tableRow.addValue(COLUMN_6, uris);
 
 			table.getRows().add(tableRow);
 		}
@@ -193,10 +251,8 @@ public final class UiUtils {
 
 		Table table = new Table();
 		table.getHeaders().put(COLUMN_1, new TableHeader("service"));
-		table.getHeaders().put(COLUMN_2, new TableHeader("version"));
-		table.getHeaders().put(COLUMN_3, new TableHeader("provider"));
-		table.getHeaders().put(COLUMN_4, new TableHeader("plans"));
-		table.getHeaders().put(COLUMN_5, new TableHeader("description"));
+		table.getHeaders().put(COLUMN_2, new TableHeader("plans"));
+		table.getHeaders().put(COLUMN_3, new TableHeader("description"));
 
 		List<String> CloudServicePlanNames;
 
@@ -206,21 +262,15 @@ public final class UiUtils {
 			table.getHeaders().get(COLUMN_1).updateWidth(serviceOffering.getLabel().length());
 			tableRow.addValue(COLUMN_1, serviceOffering.getLabel());
 
-			table.getHeaders().get(COLUMN_2).updateWidth(serviceOffering.getVersion().length());
-			tableRow.addValue(COLUMN_2, serviceOffering.getVersion());
-
-			table.getHeaders().get(COLUMN_3).updateWidth(serviceOffering.getProvider().length());
-			tableRow.addValue(COLUMN_3, serviceOffering.getProvider());
-
 			CloudServicePlanNames = new ArrayList<String>();
 			for (CloudServicePlan servicePlan : serviceOffering.getCloudServicePlans()) {
 				CloudServicePlanNames.add(servicePlan.getName());
 			}
-			table.getHeaders().get(COLUMN_4).updateWidth(CloudServicePlanNames.toString().length() - 1);
-			tableRow.addValue(COLUMN_4, CloudServicePlanNames.toString().substring(1, CloudServicePlanNames.toString().length() - 1));
+			table.getHeaders().get(COLUMN_2).updateWidth(CloudServicePlanNames.toString().length() - 1);
+			tableRow.addValue(COLUMN_2, CloudServicePlanNames.toString().substring(1, CloudServicePlanNames.toString().length() - 1));
 
-			table.getHeaders().get(COLUMN_5).updateWidth(serviceOffering.getDescription().length());
-			tableRow.addValue(COLUMN_5, serviceOffering.getDescription());
+			table.getHeaders().get(COLUMN_3).updateWidth(serviceOffering.getDescription().length());
+			tableRow.addValue(COLUMN_3, serviceOffering.getDescription());
 
 			table.getRows().add(tableRow);
 		}
@@ -250,33 +300,37 @@ public final class UiUtils {
 		Table table = new Table();
 		table.getHeaders().put(COLUMN_1, new TableHeader("name"));
 		table.getHeaders().put(COLUMN_2, new TableHeader("service"));
-		table.getHeaders().put(COLUMN_3, new TableHeader("provider"));
-		table.getHeaders().put(COLUMN_4, new TableHeader("version"));
-		table.getHeaders().put(COLUMN_5, new TableHeader("plan"));
-		table.getHeaders().put(COLUMN_6, new TableHeader("bound apps"));
+		table.getHeaders().put(COLUMN_3, new TableHeader("plan"));
+		table.getHeaders().put(COLUMN_4, new TableHeader("bound apps"));
 
 		for (CloudService service : services) {
 			TableRow tableRow = new TableRow();
 
-			table.getHeaders().get(COLUMN_1).updateWidth(service.getName().length());
-			tableRow.addValue(COLUMN_1, service.getName());
+			String name = service.getName();
 
-			table.getHeaders().get(COLUMN_2).updateWidth(service.getLabel().length());
-			tableRow.addValue(COLUMN_2, service.getLabel());
+			String label;
+			String plan;
+			if (service.isUserProvided()) {
+				label = "user-provided";
+				plan = "";
+			} else {
+				label = service.getLabel();
+				plan = service.getPlan();
+			}
 
-			table.getHeaders().get(COLUMN_3).updateWidth(service.getProvider().length());
-			tableRow.addValue(COLUMN_3, service.getProvider());
+			table.getHeaders().get(COLUMN_1).updateWidth(name.length());
+			tableRow.addValue(COLUMN_1, name);
 
-			table.getHeaders().get(COLUMN_4).updateWidth(service.getVersion().length());
-			tableRow.addValue(COLUMN_4, service.getVersion());
+			table.getHeaders().get(COLUMN_2).updateWidth(label.length());
+			tableRow.addValue(COLUMN_2, label);
 
-			table.getHeaders().get(COLUMN_5).updateWidth(service.getPlan().length());
-			tableRow.addValue(COLUMN_5, service.getPlan());
+			table.getHeaders().get(COLUMN_3).updateWidth(plan.length());
+			tableRow.addValue(COLUMN_3, plan);
 
-			final List<String> appNames = servicesToApps.get(service.getName());
+			final List<String> appNames = servicesToApps.get(name);
 			final String appNamesString = CommonUtils.collectionToCommaDelimitedString(appNames);
-			table.getHeaders().get(COLUMN_6).updateWidth(appNamesString.length());
-			tableRow.addValue(COLUMN_6, appNamesString);
+			table.getHeaders().get(COLUMN_4).updateWidth(appNamesString.length());
+			tableRow.addValue(COLUMN_4, appNamesString);
 
 			table.getRows().add(tableRow);
 		}
@@ -356,15 +410,39 @@ public final class UiUtils {
 	 */
 	public static String renderCloudInfoFormattedAsString(CloudInfo cloudInfo, String target, String org, String space) {
 
-		StringBuilder sb = new StringBuilder("\n");
+		final String cloudInfoMessage = "\n" +
+		UiUtils.HORIZONTAL_LINE +
+		String.format("API endpoint: %s (API version: %s) \n", target, cloudInfo.getVersion()) +
+		String.format("user:         %s\n", cloudInfo.getUser()) +
+		String.format("org:          %s\n", org) +
+		String.format("space:        %s\n", space) +
+		UiUtils.HORIZONTAL_LINE;
 
-		sb.append(UiUtils.HORIZONTAL_LINE);
-		sb.append(String.format("CF instance: %s (API version: %s) \n", target, cloudInfo.getVersion()));
-		sb.append(String.format("  user:        %s\n", cloudInfo.getUser()));
-		sb.append(String.format("  target app space: %s (org: %s) \n", target, org, space));
+		return cloudInfoMessage;
+	}
 
-		sb.append(UiUtils.HORIZONTAL_LINE);
-		return sb.toString();
+	/**
+	 * Renders a line of application logging output.
+	 */
+	public static String renderApplicationLogEntry(ApplicationLog logEntry) {
+		StringBuilder logLine = new StringBuilder();
+
+		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+		logLine.append(dateFormat.format(logEntry.getTimestamp())).append(" ");
+
+		String source;
+		if (logEntry.getSourceName().equals("App")) {
+			source = String.format("[%s/%s]", logEntry.getSourceName(), logEntry.getSourceId());
+		} else {
+			source = String.format("[%s]", logEntry.getSourceName());
+		}
+		logLine.append(String.format("%-10s", source));
+
+		logLine.append(logEntry.getMessageType().name().substring("STD".length())).append(" ");
+
+		logLine.append(logEntry.getMessage());
+
+		return logLine.toString();
 	}
 
 	/**
@@ -383,5 +461,35 @@ public final class UiUtils {
 		headerBorder.append("\n");
 
 		return headerBorder.toString();
+	}
+
+	public static String formatMBytes(int size) {
+		int g = size / 1024;
+
+		DecimalFormat dec = new DecimalFormat("0");
+
+		if (g > 1) {
+			return dec.format(g).concat("G");
+		} else {
+			return dec.format(size).concat("M");
+		}
+	}
+
+	public static String formatBytes(double size) {
+		double k = size / 1024.0;
+		double m = k / 1024.0;
+		double g = m / 1024.0;
+
+		DecimalFormat dec = new DecimalFormat("0");
+
+		if (g > 1) {
+			return dec.format(g).concat("G");
+		} else if (m > 1) {
+			return dec.format(m).concat("M");
+		} else if (k > 1) {
+			return dec.format(k).concat("K");
+		} else {
+			return dec.format(size).concat("B");
+		}
 	}
 }

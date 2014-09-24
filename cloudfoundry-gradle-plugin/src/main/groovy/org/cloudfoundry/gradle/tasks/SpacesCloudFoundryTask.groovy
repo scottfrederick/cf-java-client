@@ -21,6 +21,8 @@ import org.gradle.api.tasks.TaskAction
 
 /**
  * A task used to display available spaces.
+ *
+ * @author Scott Frederick
  */
 @Mixin(AppStatusCloudFoundryHelper)
 class SpacesCloudFoundryTask extends AbstractCloudFoundryTask {
@@ -37,12 +39,14 @@ class SpacesCloudFoundryTask extends AbstractCloudFoundryTask {
 
             FlexibleTableOutput output = new FlexibleTableOutput()
 
-            spaces.each { space ->
-                // todo: display apps and service instances
+            spaces.findAll { space ->
+                space.organization.name == current.organization.name
+            }
+            .each { space ->
                 output.addRow(name: space.name)
             }
 
-            log "Spaces in ${current.organization.name}\n" + output.toString()
+            log "Spaces in org ${current.organization.name}\n\n" + output.toString()
         }
     }
 }

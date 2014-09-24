@@ -23,15 +23,19 @@ import java.util.List;
 import java.util.Map;
 
 import org.cloudfoundry.client.lib.archive.ApplicationArchive;
+import org.cloudfoundry.client.lib.domain.ApplicationLog;
 import org.cloudfoundry.client.lib.domain.ApplicationStats;
 import org.cloudfoundry.client.lib.domain.CloudApplication;
 import org.cloudfoundry.client.lib.domain.CloudDomain;
 import org.cloudfoundry.client.lib.domain.CloudInfo;
 import org.cloudfoundry.client.lib.domain.CloudOrganization;
+import org.cloudfoundry.client.lib.domain.CloudQuota;
 import org.cloudfoundry.client.lib.domain.CloudRoute;
 import org.cloudfoundry.client.lib.domain.CloudService;
+import org.cloudfoundry.client.lib.domain.CloudServiceBroker;
 import org.cloudfoundry.client.lib.domain.CloudServiceOffering;
 import org.cloudfoundry.client.lib.domain.CloudSpace;
+import org.cloudfoundry.client.lib.domain.CloudStack;
 import org.cloudfoundry.client.lib.domain.CrashesInfo;
 import org.cloudfoundry.client.lib.domain.InstancesInfo;
 import org.cloudfoundry.client.lib.domain.Staging;
@@ -46,6 +50,7 @@ import org.springframework.web.client.ResponseErrorHandler;
  * @author Jennifer Hickey
  * @author Dave Syer
  * @author Thomas Risberg
+ * @author Alexander Orlov
  */
 public interface CloudFoundryOperations {
 
@@ -149,13 +154,6 @@ public interface CloudFoundryOperations {
 	ApplicationStats getApplicationStats(String appName);
 
 	/**
-	 * Get choices for application memory quota.
-	 *
-	 * @return memory choices in MB
-	 */
-	int[] getApplicationMemoryChoices();
-
-	/**
 	 * Create application.
 	 *
 	 * @param appName application name
@@ -164,9 +162,21 @@ public interface CloudFoundryOperations {
 	 * @param uris list of URIs for the app
 	 * @param serviceNames list of service names to bind to app
 	 */
-	void createApplication(String appName, Staging staging, int memory, List<String> uris,
+	void createApplication(String appName, Staging staging, Integer memory, List<String> uris,
                            List<String> serviceNames);
 
+	/**
+	 * Create application.
+	 *
+	 * @param appName      application name
+	 * @param staging      staging info
+	 * @param disk         disk quota to use in MB
+	 * @param memory       memory to use in MB
+	 * @param uris         list of URIs for the app
+	 * @param serviceNames list of service names to bind to app
+	 */
+	public void createApplication(String appName, Staging staging, Integer disk, Integer memory, List<String> uris,
+	                              List<String> serviceNames);
 
 	/**
 	 * Create a service.
@@ -174,6 +184,19 @@ public interface CloudFoundryOperations {
 	 * @param service cloud service info
 	 */
 	void createService(CloudService service);
+
+	/**
+	 * Create a user-provided service.
+	 *
+	 * @param service cloud service info
+	 * @param credentials the user-provided service credentials
+	 */
+	void createUserProvidedService(CloudService service, Map<String, Object> credentials);
+
+	/**
+	 * Delete routes that do not have any application which is assigned to them.
+	 */
+	List<CloudRoute> deleteOrphanedRoutes();
 
 	/**
 	 * Upload an application.
@@ -268,10 +291,18 @@ public interface CloudFoundryOperations {
 	void deleteAllServices();
 
 	/**
+	 * Update application disk quota.
+	 *
+	 * @param appName name of application
+	 * @param disk new disk setting in MB
+	 */
+	void updateApplicationDiskQuota(String appName, int disk);
+
+	/**
 	 * Update application memory.
 	 *
 	 * @param appName name of application
-	 * @param memory new memory setting
+	 * @param memory new memory setting in MB
 	 */
 	void updateApplicationMemory(String appName, int memory);
 
@@ -332,8 +363,31 @@ public interface CloudFoundryOperations {
 	 * @param appName name of the application
 	 * @return a Map containing the logs. The logs will be returned with the path to the log file used as the key and
 	 * the full content of the log file will be returned as a String value for the corresponding key.
+	 * @deprecated Use {@link #streamLogs(String, ApplicationLogListener)} or {@link #getRecentLogs(String)}
 	 */
 	Map<String, String> getLogs(String appName);
+	
+	/**
+	 * Stream application logs produced <em>after</em> this method is called.
+	 * 
+	 * This method has 'tail'-like behavior. Every time there is a new log entry,
+	 * it notifies the listener.
+	 * 
+	 * @param appName the name of the application
+	 * @param listener listener object to be notified
+	 * @return token than can be used to cancel listening for logs
+	 */
+	StreamingLogToken streamLogs(String appName, ApplicationLogListener listener);
+	
+	/**
+	 * Stream recent log entries.
+	 * 
+	 * Stream logs that were recently produced for an app.
+	 *
+	 * @param appName the name of the application
+	 * @return the list of recent log entries
+	 */
+	List<ApplicationLog> getRecentLogs(String appName);
 
 	/**
 	 * Get logs from most recent crash of the deployed application. The logs
@@ -343,6 +397,7 @@ public interface CloudFoundryOperations {
 	 * @param appName name of the application
 	 * @return a Map containing the logs. The logs will be returned with the path to the log file used as the key and
 	 * the full content of the log file will be returned as a String value for the corresponding key.
+	 * @deprecated Use {@link #streamLogs(String, ApplicationLogListener)} or {@link #getRecentLogs(String)}
 	 */
 	Map<String, String> getCrashLogs(String appName);
 	
@@ -361,6 +416,22 @@ public interface CloudFoundryOperations {
 	 *         available.
 	 */
 	String getStagingLogs(StartingInfo info, int offset);
+
+
+	/**
+	 * Get the list of stacks available for staging applications.
+	 *
+	 * @return the list of available stacks
+	 */
+	List<CloudStack> getStacks();
+
+	/**
+	 * Get a stack by name.
+	 *
+	 * @param name the name of the stack to get
+	 * @return the stack, or null if not found
+	 */
+	CloudStack getStack(String name);
 
 	/**
 	 * Get file from the deployed application.
@@ -437,6 +508,53 @@ public interface CloudFoundryOperations {
 	List<CloudServiceOffering> getServiceOfferings();
 
 	/**
+	 * Get all service brokers.
+	 *
+	 * @return
+	 */
+	List<CloudServiceBroker> getServiceBrokers();
+
+	/**
+	 * Get a service broker.
+	 *
+	 * @param name the service broker name
+	 * @return the service broker
+	 */
+	CloudServiceBroker getServiceBroker(String name);
+
+	/**
+	 * Create a service broker.
+	 *
+	 * @param serviceBroker cloud service broker info
+	 */
+	void createServiceBroker(CloudServiceBroker serviceBroker);
+
+	/**
+	 * Update a service broker (unchanged forces catalog refresh).
+	 *
+	 * @param serviceBroker cloud service broker info
+	 */
+	void updateServiceBroker(CloudServiceBroker serviceBroker);
+
+	/**
+	 * Delete a service broker.
+	 *
+	 * @param name the service broker name
+	 */
+	void deleteServiceBroker(String name);
+
+
+	/**
+	 * Service plans are private by default when a service broker's catalog is
+	 * fetched/updated. This method will update the visibility of all plans for
+	 * a broker to either public or private.
+	 *
+	 * @param name       the service broker name
+	 * @param visibility true for public, false for private
+	 */
+	void updateServicePlanVisibilityForBroker(String name, boolean visibility);
+
+	/**
 	 * Associate (provision) a service with an application.
 	 *
 	 * @param appName the application name
@@ -483,45 +601,64 @@ public interface CloudFoundryOperations {
 	void rename(String appName, String newName);
 
 	/**
-	 * Get list of all domain registered for the current organization
-	 * of this session.
+	 * Get list of all domain registered for the current organization.
 	 *
 	 * @return list of domains
 	 */
 	List<CloudDomain> getDomainsForOrg();
 
 	/**
-	 * Get list of all domain registered for the given space.
+	 * Get list of all private domains.
+	 *
+	 * @return list of private domains
+	 */
+	List<CloudDomain> getPrivateDomains();
+
+	/**
+	 * Get list of all shared domains.
+	 *
+	 * @return list of shared domains
+	 */
+	List<CloudDomain> getSharedDomains();
+
+	/**
+	 * Get list of all domain shared and private domains.
 	 *
 	 * @return list of domains
 	 */
 	List<CloudDomain> getDomains();
 
 	/**
-	 * Add domain to the current space of this session. If the domain
-	 * doesn't exist for the organization it will be created.
+	 * Gets the default domain for the current org, which is the first shared domain.
+	 *
+	 * @return the default domain
+	 */
+	CloudDomain getDefaultDomain();
+
+	/**
+	 * Add a private domain in the current organization.
 	 *
 	 * @param domainName the domain to add
 	 */
 	void addDomain(String domainName);
 
 	/**
-	 * Remove a domain from the space of the current session.
+	 * Delete a private domain in the current organization.
 	 *
-	 * @param domainName the domain to delete
+	 * @param domainName the domain to remove
+	 * @deprecated alias for {@link #deleteDomain}
 	 */
 	void removeDomain(String domainName);
 
 	/**
-	 * Delete a domain registered to the current organization of this session.
+	 * Delete a private domain in the current organization.
 	 *
 	 * @param domainName the domain to delete
 	 */
 	void deleteDomain(String domainName);
 
 	/**
-	 * Get the info for all routes for a domain belonging to the current space
-	 * of this session.
+	 * Get the info for all routes for a domain.
 	 *
 	 * @param domainName the domain the routes belong to
 	 * @return list of routes
@@ -529,7 +666,7 @@ public interface CloudFoundryOperations {
 	List<CloudRoute> getRoutes(String domainName);
 
 	/**
-	 * Register a new route to the space of the current session.
+	 * Register a new route to the a domain.
 	 *
 	 * @param host the host of the route to register
 	 * @param domainName the domain of the route to register
@@ -545,13 +682,6 @@ public interface CloudFoundryOperations {
 	void deleteRoute(String host, String domainName);
 
 	/**
-	 * Update http proxy configuration settings.
-	 *
-	 * @param httpProxyConfiguration the new configuration settings
-	 */
-	void updateHttpProxyConfiguration(HttpProxyConfiguration httpProxyConfiguration);
-
-	/**
 	 * Register a new RestLogCallback
 	 *
 	 * @param callBack the callback to be registered
@@ -564,4 +694,51 @@ public interface CloudFoundryOperations {
 	 * @param callBack the callback to be un-registered
 	 */
 	void unRegisterRestLogListener(RestLogCallback callBack);
+	
+	/**
+	 * Get quota by name
+	 *
+	 * @param quotaName
+	 * @param required
+	 * @return CloudQuota instance
+	 */
+	CloudQuota getQuotaByName(String quotaName, boolean required);
+
+
+	/**
+	 * Set quota to organization
+	 *
+	 * @param orgName
+	 * @param quotaName
+	 */
+	void setQuotaToOrg(String orgName, String quotaName);
+
+	/**
+	 * Create quota
+	 *
+	 * @param quota
+	 */
+	void createQuota(CloudQuota quota);
+
+	/**
+	 * Delete quota by name
+	 *
+	 * @param quotaName
+	 */
+	void deleteQuota(String quotaName);
+
+	/**
+	 * Get quota definitions
+	 *
+	 * @return List<CloudQuota>
+	 */
+	List<CloudQuota> getQuotas();
+
+	/**
+	 * Update Quota definition
+	 *
+	 * @param quota
+	 * @param name
+	 */
+	void updateQuota(CloudQuota quota, String name);
 }

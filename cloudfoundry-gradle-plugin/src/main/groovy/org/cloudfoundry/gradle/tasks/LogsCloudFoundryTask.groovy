@@ -16,31 +16,51 @@
 
 package org.cloudfoundry.gradle.tasks
 
+import org.cloudfoundry.client.lib.ApplicationLogListener
+import org.cloudfoundry.client.lib.domain.ApplicationLog
+import org.gradle.api.GradleException
 import org.gradle.api.tasks.TaskAction
 
 /**
  * Task which displays log files.
  */
+@Mixin(LogsCloudFoundryHelper)
 class LogsCloudFoundryTask extends AbstractCloudFoundryTask {
     LogsCloudFoundryTask() {
         super()
-        description = 'Shows the contents of log files'
+        description = 'Shows a tail of log entries'
     }
 
     @TaskAction
     void showLogs() {
         withCloudFoundryClient {
-            log "Getting logs for ${application}"
+            log "Getting logs for ${application}\n"
 
             withApplication {
-                Map<String, String> logs = client.getLogs(application)
-                logs.each { name, content ->
-                    StringBuilder sb = new StringBuilder()
-                    sb.append("Reading ${name}\n")
-                    sb.append(content)
-
-                    log sb.toString()
+                def listener = new LoggingListener()
+                client.streamLogs(application, listener)
+                synchronized (listener) {
+                    listener.wait()
                 }
+            }
+        }
+    }
+
+    private class LoggingListener implements ApplicationLogListener {
+        public void onMessage(ApplicationLog logEntry) {
+            log formatLogEntry(logEntry)
+        }
+
+        public void onError(Throwable e) {
+            synchronized (this) {
+                this.notify()
+            }
+            throw new GradleException("Error streaming logs", e)
+        }
+
+        public void onComplete() {
+            synchronized (this) {
+                this.notify()
             }
         }
     }
