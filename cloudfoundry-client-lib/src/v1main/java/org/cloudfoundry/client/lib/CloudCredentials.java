@@ -35,6 +35,8 @@ public class CloudCredentials {
 
 	private OAuth2AccessToken token;
 
+	private String proxyUser;
+
 	/**
 	 * Create credentials using email and password.
 	 *
@@ -107,6 +109,20 @@ public class CloudCredentials {
 	}
 
 	/**
+	 * Create proxy credentials.
+	 *
+	 * @param cloudCredentials credentials to use
+	 * @param proxyForUser user to be proxied
+	 */
+	public CloudCredentials(CloudCredentials cloudCredentials, String proxyForUser) {
+		this.email = cloudCredentials.getEmail();
+		this.password = cloudCredentials.getPassword();
+		this.clientId = cloudCredentials.getClientId();
+		this.token = cloudCredentials.getToken();
+		this.proxyUser = proxyForUser;
+	}
+
+	/**
 	 * Get the email.
 	 *
 	 * @return the email
@@ -149,5 +165,34 @@ public class CloudCredentials {
 	 */
 	public String getClientSecret() {
 		return clientSecret;
+	}
+
+	/**
+	 * Get the proxy user.
+	 *
+	 * @return the proxy user
+	 */
+	public String getProxyUser() {
+		return proxyUser;
+	}
+
+	/**
+	 * Is this a proxied set of credentials?
+	 *
+	 * @return whether a proxy user is set
+	 */
+	public boolean isProxyUserSet()  {
+		return proxyUser != null;
+	}
+
+	/**
+	 * Run commands as a different user.  The authenticated user must be
+	 * privileged to run as this user.
+
+	 * @param user the user to proxy for
+	 * @return credentials for the proxied user
+	 */
+	public CloudCredentials proxyForUser(String user) {
+		return new CloudCredentials(this, user);
 	}
 }

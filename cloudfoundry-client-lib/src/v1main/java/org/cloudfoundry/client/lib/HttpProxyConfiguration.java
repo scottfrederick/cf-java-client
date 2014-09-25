@@ -16,6 +16,12 @@
 
 package org.cloudfoundry.client.lib;
 
+
+/**
+ * Class that encapsulates http proxy information
+ *
+ * @author Thomas Risberg
+ */
 public class HttpProxyConfiguration {
 
 	private String proxyHost;

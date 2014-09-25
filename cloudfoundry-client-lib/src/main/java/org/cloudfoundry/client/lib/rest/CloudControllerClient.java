@@ -16,222 +16,86 @@
 
 package org.cloudfoundry.client.lib.rest;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URL;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import org.cloudfoundry.client.lib.ApplicationLogListener;
-import org.cloudfoundry.client.lib.ClientHttpResponseCallback;
 import org.cloudfoundry.client.lib.CloudCredentials;
-import org.cloudfoundry.client.lib.RestLogCallback;
-import org.cloudfoundry.client.lib.StartingInfo;
-import org.cloudfoundry.client.lib.StreamingLogToken;
-import org.cloudfoundry.client.lib.UploadStatusCallback;
-import org.cloudfoundry.client.lib.archive.ApplicationArchive;
-import org.cloudfoundry.client.lib.domain.ApplicationLog;
-import org.cloudfoundry.client.lib.domain.ApplicationStats;
-import org.cloudfoundry.client.lib.domain.CloudApplication;
-import org.cloudfoundry.client.lib.domain.CloudDomain;
-import org.cloudfoundry.client.lib.domain.CloudInfo;
-import org.cloudfoundry.client.lib.domain.CloudOrganization;
-import org.cloudfoundry.client.lib.domain.CloudQuota;
-import org.cloudfoundry.client.lib.domain.CloudRoute;
-import org.cloudfoundry.client.lib.domain.CloudService;
-import org.cloudfoundry.client.lib.domain.CloudServiceBroker;
-import org.cloudfoundry.client.lib.domain.CloudServiceOffering;
-import org.cloudfoundry.client.lib.domain.CloudSpace;
-import org.cloudfoundry.client.lib.domain.CloudStack;
-import org.cloudfoundry.client.lib.domain.CrashesInfo;
-import org.cloudfoundry.client.lib.domain.InstancesInfo;
-import org.cloudfoundry.client.lib.domain.Staging;
+import org.cloudfoundry.client.lib.domain.Organization;
+import org.cloudfoundry.client.lib.domain.PagedResource;
+import org.cloudfoundry.client.lib.domain.Space;
+import org.cloudfoundry.client.lib.oauth2.OauthClient;
+import org.cloudfoundry.client.lib.repository.DomainRepository;
+import org.cloudfoundry.client.lib.repository.FeignRepositoryFactory;
+import org.cloudfoundry.client.lib.repository.InfoRepository;
+import org.cloudfoundry.client.lib.repository.OrganizationRepository;
+import org.cloudfoundry.client.lib.repository.SpaceRepository;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
-import org.springframework.web.client.ResponseErrorHandler;
 
-/**
- * Interface defining operations available for the cloud controller REST client implementations
- *
- * @author Thomas Risberg
- */
-public interface CloudControllerClient {
+import java.net.URL;
 
-	// User and Info methods
+public class CloudControllerClient {
 
-	void setResponseErrorHandler(ResponseErrorHandler errorHandler);
+	private OauthClient oauthClient;
 
-	URL getCloudControllerUrl();
+	protected CloudCredentials cloudCredentials;
 
-	CloudInfo getInfo();
+	protected Space sessionSpace;
 
-	List<CloudSpace> getSpaces();
+	private FeignRepositoryFactory repositoryFactory;
 
-	List<CloudOrganization> getOrganizations();
+	public CloudControllerClient(URL cloudControllerUrl, OauthClient oauthClient,
+	                             CloudCredentials cloudCredentials, String orgName, String spaceName) {
+		initialize(cloudControllerUrl, oauthClient, cloudCredentials);
 
-	OAuth2AccessToken login();
+		this.sessionSpace = validateSpaceAndOrg(spaceName, orgName);
+	}
 
-	void logout();
+	private void initialize(URL cloudControllerUrl, OauthClient oauthClient, CloudCredentials cloudCredentials) {
+		oauthClient.init(cloudCredentials);
 
-	void register(String email, String password);
+		this.cloudCredentials = cloudCredentials;
 
-	void updatePassword(String newPassword);
+		this.oauthClient = oauthClient;
 
-	void updatePassword(CloudCredentials credentials, String newPassword);
+		this.repositoryFactory = new FeignRepositoryFactory(cloudControllerUrl, oauthClient);
+	}
 
-	void unregister();
+	private Space validateSpaceAndOrg(String spaceName, String orgName) {
+		SpaceRepository spaceRepository = getSpaceRepository();
 
-	// Service methods
+		PagedResource<Space> spaces = spaceRepository.getAll();
 
-	List<CloudService> getServices();
+		for (Space space : spaces.getResources()) {
+			if (space.getName().equals(spaceName)) {
+				Organization org = space.getOrganization();
+				if (orgName == null || org.getName().equals(orgName)) {
+					return space;
+				}
+			}
+		}
 
-	void createService(CloudService service);
+		throw new IllegalArgumentException("No matching organization and space found for org: " + orgName + " space: " + spaceName);
+	}
 
-	void createUserProvidedService(CloudService service, Map<String, Object> credentials);
+	public InfoRepository getInfoRepository() {
+		return repositoryFactory.createRepository(InfoRepository.class);
+	}
 
-	CloudService getService(String service);
+	public OrganizationRepository getOrganizationRepository() {
+		return repositoryFactory.createRepository(OrganizationRepository.class);
+	}
 
-	void deleteService(String service);
+	public SpaceRepository getSpaceRepository() {
+		return repositoryFactory.createRepository(SpaceRepository.class);
+	}
 
-	void deleteAllServices();
+	public DomainRepository getDomainRepository() {
+		return repositoryFactory.createRepository(DomainRepository.class);
+	}
 
-	List<CloudServiceOffering> getServiceOfferings();
+	public OAuth2AccessToken login() {
+		oauthClient.init(cloudCredentials);
+		return oauthClient.getToken();
+	}
 
-	List<CloudServiceBroker> getServiceBrokers();
-
-    CloudServiceBroker getServiceBroker(String name);
-
-    void createServiceBroker(CloudServiceBroker serviceBroker);
-
-    void updateServiceBroker(CloudServiceBroker serviceBroker);
-
-    void deleteServiceBroker(String name);
-
-    void updateServicePlanVisibilityForBroker(String name, boolean visibility);
-
-    // App methods
-
-	List<CloudApplication> getApplications();
-
-	CloudApplication getApplication(String appName);
-	
-	CloudApplication getApplication(UUID appGuid);
-
-	ApplicationStats getApplicationStats(String appName);
-
-	void createApplication(String appName, Staging staging, Integer memory, List<String> uris,
-	                       List<String> serviceNames);
-
-	void createApplication(String appName, Staging staging, Integer disk, Integer memory,
-	                       List<String> uris, List<String> serviceNames);
-
-	void uploadApplication(String appName, File file, UploadStatusCallback callback) throws IOException;
-
-	void uploadApplication(String appName, ApplicationArchive archive, UploadStatusCallback callback) throws IOException;
-
-	StartingInfo startApplication(String appName);
-
-	void debugApplication(String appName, CloudApplication.DebugMode mode);
-
-	void stopApplication(String appName);
-
-	StartingInfo restartApplication(String appName);
-
-	void deleteApplication(String appName);
-
-	void deleteAllApplications();
-
-	void updateApplicationDiskQuota(String appName, int disk);
-
-	void updateApplicationMemory(String appName, int memory);
-
-	void updateApplicationInstances(String appName, int instances);
-
-	void updateApplicationServices(String appName, List<String> services);
-
-	void updateApplicationStaging(String appName, Staging staging);
-
-	void updateApplicationUris(String appName, List<String> uris);
-
-	void updateApplicationEnv(String appName, Map<String, String> env);
-
-	void updateApplicationEnv(String appName, List<String> env);
-
-	Map<String, String> getLogs(String appName);
-
-	StreamingLogToken streamLogs(String appName, ApplicationLogListener listener);
-
-	List<ApplicationLog> getRecentLogs(String appName);
-
-	Map<String, String> getCrashLogs(String appName);
-
-	String getFile(String appName, int instanceIndex, String filePath, int startPosition, int endPosition);
-
-	void openFile(String appName, int instanceIndex, String filePath, ClientHttpResponseCallback callback);
-
-	void bindService(String appName, String serviceName);
-
-	void unbindService(String appName, String serviceName);
-
-	InstancesInfo getApplicationInstances(String appName);
-
-	InstancesInfo getApplicationInstances(CloudApplication app);
-
-	CrashesInfo getCrashes(String appName);
-
-	void rename(String appName, String newName);
-
-	String getStagingLogs(StartingInfo info, int offset);
-
-	List<CloudStack> getStacks();
-
-	CloudStack getStack(String name);
-
-	// Domains and routes management
-
-
-	List<CloudDomain> getDomainsForOrg();
-
-	List<CloudDomain> getDomains();
-
-	List<CloudDomain> getPrivateDomains();
-
-	List<CloudDomain> getSharedDomains();
-
-	CloudDomain getDefaultDomain();
-
-	void addDomain(String domainName);
-
-	void deleteDomain(String domainName);
-
-	void removeDomain(String domainName);
-
-	List<CloudRoute> getRoutes(String domainName);
-
-	void addRoute(String host, String domainName);
-
-	void deleteRoute(String host, String domainName);
-
-	List<CloudRoute> deleteOrphanedRoutes();
-
-	// Misc. utility methods
-
-	void registerRestLogListener(RestLogCallback callBack);
-
-	void unRegisterRestLogListener(RestLogCallback callBack);
-
-    // Quota operations
-	CloudOrganization getOrgByName(String orgName, boolean required);
-    
-    List<CloudQuota> getQuotas();
-    
-    CloudQuota getQuotaByName(String quotaName, boolean required);
-    
-    void createQuota(CloudQuota quota);
-    
-    void updateQuota(CloudQuota quota, String name);
-    
-    void deleteQuota(String quotaName);
-    
-    void setQuotaToOrg(String orgName, String quotaName);
+	public void logout() {
+		oauthClient.clear();
+	}
 }

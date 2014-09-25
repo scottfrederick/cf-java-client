@@ -41,7 +41,7 @@ public class CloudFoundryException extends HttpClientErrorException {
 	}
 
 	/**
-	 * Construct a new instance of {@code CloudFoundryException} based on a {@link org.springframework.http.HttpStatus}, status text and description.
+	 * Construct a new instance of {@code CloudFoundryException} based on a {@link HttpStatus}, status text and description.
 	 * @param statusCode the status code
 	 * @param statusText the status text
 	 * @param description the description

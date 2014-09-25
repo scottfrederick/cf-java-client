@@ -39,6 +39,7 @@ import org.cloudfoundry.client.lib.domain.CloudStack;
 import org.cloudfoundry.client.lib.domain.CrashesInfo;
 import org.cloudfoundry.client.lib.domain.InstancesInfo;
 import org.cloudfoundry.client.lib.domain.Staging;
+import org.cloudfoundry.client.lib.repository.InfoRepository;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 import org.springframework.web.client.ResponseErrorHandler;
 
@@ -67,6 +68,8 @@ public interface CloudFoundryOperations {
 	 * @return the cloud controller URL
 	 */
 	URL getCloudControllerUrl();
+
+	InfoRepository getInfoRepository();
 
 	/**
 	 * Get CloudInfo for the current cloud.

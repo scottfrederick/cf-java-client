@@ -37,6 +37,13 @@ import java.util.zip.ZipFile;
 
 import javax.websocket.ClientEndpointConfig;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import feign.Feign;
+import feign.jackson.JacksonDecoder;
+import feign.jackson.JacksonEncoder;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.cloudfoundry.client.lib.ApplicationLogListener;
@@ -74,10 +81,13 @@ import org.cloudfoundry.client.lib.domain.InstancesInfo;
 import org.cloudfoundry.client.lib.domain.Staging;
 import org.cloudfoundry.client.lib.domain.UploadApplicationPayload;
 import org.cloudfoundry.client.lib.oauth2.OauthClient;
+import org.cloudfoundry.client.lib.oauth2.OauthRequestInterceptor;
+import org.cloudfoundry.client.lib.repository.InfoRepository;
 import org.cloudfoundry.client.lib.util.CloudEntityResourceMapper;
 import org.cloudfoundry.client.lib.util.CloudUtil;
 import org.cloudfoundry.client.lib.util.JsonUtil;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.util.ISO8601DateFormat;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -208,6 +218,22 @@ public class CloudControllerClientImpl implements CloudControllerClient {
 	@Override
 	public URL getCloudControllerUrl() {
 		return this.cloudControllerUrl;
+	}
+
+	@Override
+	public InfoRepository getInfoRepository() {
+		com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper()
+				.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+				.setPropertyNamingStrategy(PropertyNamingStrategy.CAMEL_CASE_TO_LOWER_CASE_WITH_UNDERSCORES)
+				.configure(SerializationFeature.INDENT_OUTPUT, true)
+				.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+				.setDateFormat(new ISO8601DateFormat());
+
+		return Feign.builder()
+				.requestInterceptor(new OauthRequestInterceptor(oauthClient))
+				.encoder(new JacksonEncoder())
+				.decoder(new JacksonDecoder(objectMapper))
+				.target(InfoRepository.class, getCloudControllerUrl().toString());
 	}
 
 	@Override
@@ -1949,7 +1975,7 @@ public class CloudControllerClientImpl implements CloudControllerClient {
 			}
 		};
 
-		String endpoint = getInfo().getLoggregatorEndpoint();
+		String endpoint = getInfo().getLoggingEndpoint();
 		String mode = recent ? "dump" : "tail";
 		UUID appId = getAppId(appName);
 		return loggregatorClient.connectToLoggregator(endpoint, mode, appId, listener, configurator);

@@ -17,13 +17,18 @@
 package org.cloudfoundry.client.lib.oauth2;
 
 import java.net.URL;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.cloudfoundry.client.lib.CloudCredentials;
 import org.cloudfoundry.client.lib.CloudFoundryException;
-import org.cloudfoundry.client.lib.HttpProxyConfiguration;
+import org.cloudfoundry.client.lib.util.JsonUtil;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.client.resource.OAuth2AccessDeniedException;
 import org.springframework.security.oauth2.client.resource.OAuth2ProtectedResourceDetails;
 import org.springframework.security.oauth2.client.token.AccessTokenRequest;
@@ -32,19 +37,28 @@ import org.springframework.security.oauth2.client.token.grant.password.ResourceO
 import org.springframework.security.oauth2.client.token.grant.password.ResourceOwnerPasswordResourceDetails;
 import org.springframework.security.oauth2.common.AuthenticationScheme;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
+import org.springframework.web.client.RestTemplate;
 
+/**
+ * Client that can handle authentication against a UAA instance
+ *
+ * @author Dave Syer
+ * @author Thomas Risberg
+ */
 public class OauthClient {
+
+	private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
+
 	private URL authorizationUrl;
-	private HttpProxyConfiguration httpProxyConfiguration;
-	private boolean trustSelfSignedCerts;
+
+	private RestTemplate restTemplate;
 
 	private OAuth2AccessToken token;
 	private CloudCredentials credentials;
 
-	public OauthClient(URL authorizationUrl, HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
+	public OauthClient(URL authorizationUrl, RestTemplate restTemplate) {
 		this.authorizationUrl = authorizationUrl;
-		this.httpProxyConfiguration = httpProxyConfiguration;
-		this.trustSelfSignedCerts = trustSelfSignedCerts;
+		this.restTemplate = restTemplate;
 	}
 
 	public void init(CloudCredentials credentials) {
@@ -65,14 +79,6 @@ public class OauthClient {
 		this.credentials = null;
 	}
 
-	public String getAuthorizationHeader() {
-		OAuth2AccessToken accessToken = getToken();
-		if (accessToken != null) {
-			return accessToken.getTokenType() + " " + accessToken.getValue();
-		}
-		return null;
-	}
-
 	public OAuth2AccessToken getToken() {
 		if (token == null) {
 			return null;
@@ -84,6 +90,14 @@ public class OauthClient {
 		}
 
 		return token;
+	}
+
+	public String getAuthorizationHeader() {
+		OAuth2AccessToken accessToken = getToken();
+		if (accessToken != null) {
+			return accessToken.getTokenType() + " " + accessToken.getValue();
+		}
+		return null;
 	}
 
 	private OAuth2AccessToken createToken(String username, String password, String clientId, String clientSecret) {
@@ -111,9 +125,25 @@ public class OauthClient {
 		return provider.refreshAccessToken(resource, currentToken.getRefreshToken(), request);
 	}
 
-	private ResourceOwnerPasswordAccessTokenProvider createResourceOwnerPasswordAccessTokenProvider() {
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	public void changePassword(String oldPassword, String newPassword) {
+		HttpHeaders headers = new HttpHeaders();
+		headers.add(AUTHORIZATION_HEADER_KEY, token.getTokenType() + " " + token.getValue());
+		HttpEntity info = new HttpEntity(headers);
+		ResponseEntity<String> response = restTemplate.exchange(authorizationUrl + "/userinfo", HttpMethod.GET, info, String.class);
+		Map<String, Object> responseMap = JsonUtil.convertJsonToMap(response.getBody());
+		String userId = (String) responseMap.get("user_id");
+		Map<String, Object> body = new HashMap<String, Object>();
+		body.put("schemas", new String[] {"urn:scim:schemas:core:1.0"});
+		body.put("password", newPassword);
+		body.put("oldPassword", oldPassword);
+		HttpEntity<Map> httpEntity = new HttpEntity<Map>(body, headers);
+		restTemplate.put(authorizationUrl + "/User/{id}/password", httpEntity, userId);
+	}
+
+	protected ResourceOwnerPasswordAccessTokenProvider createResourceOwnerPasswordAccessTokenProvider() {
 		ResourceOwnerPasswordAccessTokenProvider resourceOwnerPasswordAccessTokenProvider = new ResourceOwnerPasswordAccessTokenProvider();
-		// set the http proxy
+		resourceOwnerPasswordAccessTokenProvider.setRequestFactory(restTemplate.getRequestFactory()); //copy the http proxy along
 		return resourceOwnerPasswordAccessTokenProvider;
 	}
 
