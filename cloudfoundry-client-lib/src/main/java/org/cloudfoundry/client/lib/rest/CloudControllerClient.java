@@ -16,48 +16,81 @@
 
 package org.cloudfoundry.client.lib.rest;
 
-import org.cloudfoundry.client.lib.CloudCredentials;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.util.ISO8601DateFormat;
+import feign.Feign;
+import feign.jackson.JacksonDecoder;
+import feign.jackson.JacksonEncoder;
+import org.cloudfoundry.client.lib.CloudFoundryClientConfiguration;
 import org.cloudfoundry.client.lib.domain.Organization;
 import org.cloudfoundry.client.lib.domain.PagedResource;
 import org.cloudfoundry.client.lib.domain.Space;
-import org.cloudfoundry.client.lib.oauth2.OauthClient;
+import org.cloudfoundry.client.lib.oauth2.OAuthClient;
+import org.cloudfoundry.client.lib.oauth2.OAuthRequestInterceptor;
 import org.cloudfoundry.client.lib.repository.DomainRepository;
-import org.cloudfoundry.client.lib.repository.FeignRepositoryFactory;
 import org.cloudfoundry.client.lib.repository.InfoRepository;
 import org.cloudfoundry.client.lib.repository.OrganizationRepository;
 import org.cloudfoundry.client.lib.repository.SpaceRepository;
-import org.springframework.security.oauth2.common.OAuth2AccessToken;
-
-import java.net.URL;
 
 public class CloudControllerClient {
+	private final CloudFoundryClientConfiguration config;
 
-	private OauthClient oauthClient;
+	private final OAuthClient oauthClient;
 
-	protected CloudCredentials cloudCredentials;
+	private final ObjectMapper objectMapper;
 
-	protected Space sessionSpace;
+	private Space sessionSpace = null;
 
-	private FeignRepositoryFactory repositoryFactory;
-
-	public CloudControllerClient(URL cloudControllerUrl, OauthClient oauthClient,
-	                             CloudCredentials cloudCredentials, String orgName, String spaceName) {
-		initialize(cloudControllerUrl, oauthClient, cloudCredentials);
-
-		this.sessionSpace = validateSpaceAndOrg(spaceName, orgName);
-	}
-
-	private void initialize(URL cloudControllerUrl, OauthClient oauthClient, CloudCredentials cloudCredentials) {
-		oauthClient.init(cloudCredentials);
-
-		this.cloudCredentials = cloudCredentials;
+	public CloudControllerClient(CloudFoundryClientConfiguration config, OAuthClient oauthClient) {
+		this.config = config;
 
 		this.oauthClient = oauthClient;
 
-		this.repositoryFactory = new FeignRepositoryFactory(cloudControllerUrl, oauthClient);
+		this.objectMapper = createObjectMapper();
 	}
 
-	private Space validateSpaceAndOrg(String spaceName, String orgName) {
+	public void validate() {
+		this.sessionSpace = validateOrgAndSpace(config.getDefaultOrgName(), config.getDefaultSpaceName());
+	}
+
+	public InfoRepository getInfoRepository() {
+		return createRepository(InfoRepository.class);
+	}
+
+	public OrganizationRepository getOrganizationRepository() {
+		return createRepository(OrganizationRepository.class);
+	}
+
+	public SpaceRepository getSpaceRepository() {
+		return createRepository(SpaceRepository.class);
+	}
+
+	public DomainRepository getDomainRepository() {
+		return createRepository(DomainRepository.class);
+	}
+
+	private <T> T createRepository(Class<T> repositoryType) {
+		return Feign.builder()
+				.requestInterceptor(new OAuthRequestInterceptor(oauthClient))
+				.encoder(new JacksonEncoder(objectMapper))
+				.decoder(new JacksonDecoder(objectMapper))
+				.target(repositoryType, config.getCloudControllerUrl().toString());
+	}
+
+	private ObjectMapper createObjectMapper() {
+		return new ObjectMapper()
+				.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+				.setPropertyNamingStrategy(PropertyNamingStrategy.CAMEL_CASE_TO_LOWER_CASE_WITH_UNDERSCORES)
+				.configure(SerializationFeature.INDENT_OUTPUT, true)
+				.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+				.setDateFormat(new ISO8601DateFormat());
+	}
+
+	private Space validateOrgAndSpace(String orgName, String spaceName) {
 		SpaceRepository spaceRepository = getSpaceRepository();
 
 		PagedResource<Space> spaces = spaceRepository.getAll();
@@ -72,30 +105,5 @@ public class CloudControllerClient {
 		}
 
 		throw new IllegalArgumentException("No matching organization and space found for org: " + orgName + " space: " + spaceName);
-	}
-
-	public InfoRepository getInfoRepository() {
-		return repositoryFactory.createRepository(InfoRepository.class);
-	}
-
-	public OrganizationRepository getOrganizationRepository() {
-		return repositoryFactory.createRepository(OrganizationRepository.class);
-	}
-
-	public SpaceRepository getSpaceRepository() {
-		return repositoryFactory.createRepository(SpaceRepository.class);
-	}
-
-	public DomainRepository getDomainRepository() {
-		return repositoryFactory.createRepository(DomainRepository.class);
-	}
-
-	public OAuth2AccessToken login() {
-		oauthClient.init(cloudCredentials);
-		return oauthClient.getToken();
-	}
-
-	public void logout() {
-		oauthClient.clear();
 	}
 }

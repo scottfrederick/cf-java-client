@@ -22,41 +22,44 @@ import org.cloudfoundry.client.lib.repository.DomainRepository;
 import org.cloudfoundry.client.lib.repository.OrganizationRepository;
 import org.cloudfoundry.client.lib.repository.SpaceRepository;
 import org.cloudfoundry.client.lib.rest.CloudControllerClient;
-import org.cloudfoundry.client.lib.rest.CloudControllerClientFactory;
 import org.cloudfoundry.client.lib.repository.InfoRepository;
-import org.springframework.security.oauth2.common.OAuth2AccessToken;
+import org.cloudfoundry.client.lib.rest.CloudControllerClientFactory;
 
 public class CloudFoundryClient {
 
+	private CloudFoundryClientConfiguration config;
+
 	private CloudControllerClient cc;
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName) {
-		this(credentials, cloudControllerUrl, orgName, spaceName, null, false);
+	public CloudFoundryClient(URL cloudControllerUrl) {
+		this.config = new CloudFoundryClientConfiguration();
+		config.setCloudControllerUrl(cloudControllerUrl);
 	}
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName,
-	                          boolean trustSelfSignedCerts) {
-		this(credentials, cloudControllerUrl, orgName, spaceName, null, trustSelfSignedCerts);
+	public CloudFoundryClient setCredentials(CloudCredentials credentials) {
+		config.setCredentials(credentials);
+		return this;
 	}
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName,
-	                          HttpProxyConfiguration httpProxyConfiguration) {
-		this(credentials, cloudControllerUrl, orgName, spaceName, httpProxyConfiguration, false);
+	public CloudFoundryClient setDefaultOrgSpace(String orgName, String spaceName) {
+		config.setDefaultOrgName(orgName);
+		config.setDefaultSpaceName(spaceName);
+		return this;
 	}
 
-	public CloudFoundryClient(CloudCredentials credentials, URL cloudControllerUrl, String orgName, String spaceName,
-	                          HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
-		CloudControllerClientFactory cloudControllerClientFactory =
-				new CloudControllerClientFactory(httpProxyConfiguration, trustSelfSignedCerts);
-		this.cc = cloudControllerClientFactory.newCloudController(cloudControllerUrl, credentials, orgName, spaceName);
+	public CloudFoundryClient setHttpProxyConfiguration(HttpProxyConfiguration proxyConfiguration) {
+		config.setProxyConfiguration(proxyConfiguration);
+		return this;
 	}
 
-	public OAuth2AccessToken login() {
-		return cc.login();
+	public CloudFoundryClient setTrustSelfSignedCerts(boolean trustSelfSignedCerts) {
+		config.setTrustSelfSignedCerts(trustSelfSignedCerts);
+		return this;
 	}
 
-	public void logout() {
-		cc.logout();
+	public CloudFoundryClient connect() {
+		this.cc = new CloudControllerClientFactory().newCloudControllerClient(config);
+		return this;
 	}
 
 	public InfoRepository getInfoRepository() {
@@ -74,4 +77,5 @@ public class CloudFoundryClient {
 	public DomainRepository getDomainRepository() {
 		return cc.getDomainRepository();
 	}
+
 }

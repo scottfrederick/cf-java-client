@@ -16,44 +16,38 @@
 
 package org.cloudfoundry.client.lib.rest;
 
-import java.net.MalformedURLException;
-import java.net.URL;
-
-import org.cloudfoundry.client.lib.CloudCredentials;
-import org.cloudfoundry.client.lib.HttpProxyConfiguration;
+import org.cloudfoundry.client.lib.CloudFoundryClientConfiguration;
 import org.cloudfoundry.client.lib.domain.CloudInfo;
-import org.cloudfoundry.client.lib.oauth2.OauthClient;
-import org.cloudfoundry.client.lib.repository.FeignRepositoryFactory;
-import org.cloudfoundry.client.lib.repository.InfoRepository;
+import org.cloudfoundry.client.lib.oauth2.OAuthClient;
 
 public class CloudControllerClientFactory {
-	private final HttpProxyConfiguration httpProxyConfiguration;
-	private final boolean trustSelfSignedCerts;
-
-	public CloudControllerClientFactory(HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
-		this.httpProxyConfiguration = httpProxyConfiguration;
-		this.trustSelfSignedCerts = trustSelfSignedCerts;
+	public CloudControllerClientFactory() {
 	}
 
-	public CloudControllerClient newCloudController(URL cloudControllerUrl, CloudCredentials cloudCredentials,
-	                                                String orgName, String spaceName) {
-		OauthClient oauthClient = createOauthClient(cloudControllerUrl);
+	public CloudControllerClient newCloudControllerClient(CloudFoundryClientConfiguration config) {
+		OAuthClient oauthClient = createOauthClient(config);
 
-		return new CloudControllerClient(cloudControllerUrl, oauthClient, cloudCredentials, orgName, spaceName);
+		CloudControllerClient cloudControllerClient = createCloudControllerClient(config, oauthClient);
+
+		String authorizationEndpoint = getAuthorizationEndpoint(cloudControllerClient);
+
+		oauthClient.login(authorizationEndpoint, config.getCredentials());
+
+		cloudControllerClient.validate();
+
+		return cloudControllerClient;
 	}
 
-	private OauthClient createOauthClient(URL cloudControllerUrl) {
-		FeignRepositoryFactory factory = new FeignRepositoryFactory(cloudControllerUrl);
-		InfoRepository infoRepository = factory.createUnauthenticatedRepository(InfoRepository.class);
-		CloudInfo cloudInfo = infoRepository.getCloudInfo();
-		return new OauthClient(getAuthorizationUrl(cloudInfo.getAuthorizationEndpoint()), httpProxyConfiguration, trustSelfSignedCerts);
+	private OAuthClient createOauthClient(CloudFoundryClientConfiguration config) {
+		return new OAuthClient(config.getProxyConfiguration(), config.isTrustSelfSignedCerts());
 	}
 
-	private URL getAuthorizationUrl(String authorizationEndpoint) {
-		try {
-			return new URL(authorizationEndpoint);
-		} catch (MalformedURLException e) {
-			throw new IllegalArgumentException("Error creating authorization endpoint URL for endpoint " + authorizationEndpoint, e);
-		}
+	private CloudControllerClient createCloudControllerClient(CloudFoundryClientConfiguration config, OAuthClient oauthClient) {
+		return new CloudControllerClient(config, oauthClient);
+	}
+
+	private String getAuthorizationEndpoint(CloudControllerClient cloudControllerClient) {
+		CloudInfo cloudInfo = cloudControllerClient.getInfoRepository().getCloudInfo();
+		return cloudInfo.getAuthorizationEndpoint();
 	}
 }

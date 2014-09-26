@@ -34,9 +34,11 @@ class CloudFoundryClientSpecification extends Specification {
 	void clientIsConnected() {
 		if (client == null) {
 			URL cloudControllerUrl = new URL(config.targetApiUrl)
-			client = new CloudFoundryClient(new CloudCredentials(config.userEmail, config.userPassword),
-					cloudControllerUrl, config.organization, config.space, config.trustSelfSignedCerts)
-			client.login()
+			client = new CloudFoundryClient(cloudControllerUrl)
+				.setCredentials(new CloudCredentials(config.userEmail, config.userPassword))
+				.setDefaultOrgSpace(config.organization, config.space)
+				.setTrustSelfSignedCerts(config.trustSelfSignedCerts)
+				.connect()
 		}
 	}
 

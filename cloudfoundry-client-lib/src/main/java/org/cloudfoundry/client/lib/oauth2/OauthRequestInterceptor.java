@@ -3,17 +3,19 @@ package org.cloudfoundry.client.lib.oauth2;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 
-public class OauthRequestInterceptor implements RequestInterceptor {
+public class OAuthRequestInterceptor implements RequestInterceptor {
 	private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
 
-	private OauthClient oauthClient;
+	private OAuthClient oauthClient;
 
-	public OauthRequestInterceptor(OauthClient oauthClient) {
+	public OAuthRequestInterceptor(OAuthClient oauthClient) {
 		this.oauthClient = oauthClient;
 	}
 
 	@Override
 	public void apply(RequestTemplate template) {
-		template.header(AUTHORIZATION_HEADER_KEY, oauthClient.getAuthorizationHeader());
+		if (oauthClient.isLoggedIn()) {
+			template.header(AUTHORIZATION_HEADER_KEY, oauthClient.getAuthorizationHeader());
+		}
 	}
 }

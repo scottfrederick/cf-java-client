@@ -273,10 +273,10 @@
 			<artifactId>spring-security-oauth2</artifactId>
 			<version>${spring.security.oauth.version}</version>
 			<exclusions>
-				<exclusion>
-					<groupId>org.springframework</groupId>
-					<artifactId>spring-webmvc</artifactId>
-				</exclusion>
+				<!--<exclusion>-->
+					<!--<groupId>org.springframework</groupId>-->
+					<!--<artifactId>spring-webmvc</artifactId>-->
+				<!--</exclusion>-->
 				<exclusion>
 					<groupId>org.springframework</groupId>
 					<artifactId>spring-jdbc</artifactId>

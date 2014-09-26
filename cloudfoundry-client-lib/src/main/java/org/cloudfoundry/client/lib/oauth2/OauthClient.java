@@ -16,10 +16,6 @@
 
 package org.cloudfoundry.client.lib.oauth2;
 
-import java.net.URL;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 import org.cloudfoundry.client.lib.CloudCredentials;
 import org.cloudfoundry.client.lib.CloudFoundryException;
 import org.cloudfoundry.client.lib.HttpProxyConfiguration;
@@ -33,36 +29,44 @@ import org.springframework.security.oauth2.client.token.grant.password.ResourceO
 import org.springframework.security.oauth2.common.AuthenticationScheme;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 
-public class OauthClient {
-	private URL authorizationUrl;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class OAuthClient {
+	private String authorizationEndpoint;
+	private CloudCredentials credentials;
 	private HttpProxyConfiguration httpProxyConfiguration;
 	private boolean trustSelfSignedCerts;
 
 	private OAuth2AccessToken token;
-	private CloudCredentials credentials;
 
-	public OauthClient(URL authorizationUrl, HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
-		this.authorizationUrl = authorizationUrl;
+	public OAuthClient(HttpProxyConfiguration httpProxyConfiguration, boolean trustSelfSignedCerts) {
 		this.httpProxyConfiguration = httpProxyConfiguration;
 		this.trustSelfSignedCerts = trustSelfSignedCerts;
 	}
 
-	public void init(CloudCredentials credentials) {
-		if (credentials != null) {
+	public void login(String authorizationUrl, CloudCredentials credentials) {
+		if (authorizationUrl != null && credentials != null) {
+			this.authorizationEndpoint = buildAuthorizationEndpoint(authorizationUrl);
 			this.credentials = credentials;
 
 			if (credentials.getToken() != null) {
 				this.token = credentials.getToken();
 			} else {
-				this.token = createToken(credentials.getEmail(), credentials.getPassword(),
+				this.token = createToken(authorizationEndpoint, credentials.getEmail(), credentials.getPassword(),
 						credentials.getClientId(), credentials.getClientSecret());
 			}
 		}
 	}
 
-	public void clear() {
+	public void logout() {
 		this.token = null;
 		this.credentials = null;
+		this.authorizationEndpoint = null;
+	}
+
+	public boolean isLoggedIn() {
+		return token != null;
 	}
 
 	public String getAuthorizationHeader() {
@@ -73,21 +77,22 @@ public class OauthClient {
 		return null;
 	}
 
-	public OAuth2AccessToken getToken() {
+	private OAuth2AccessToken getToken() {
 		if (token == null) {
 			return null;
 		}
 
 		if (token.getExpiresIn() < 50) { // 50 seconds before expiration? Then refresh it.
-			token = refreshToken(token, credentials.getEmail(), credentials.getPassword(),
+			token = refreshToken(token, authorizationEndpoint, credentials.getEmail(), credentials.getPassword(),
 					credentials.getClientId(), credentials.getClientSecret());
 		}
 
 		return token;
 	}
 
-	private OAuth2AccessToken createToken(String username, String password, String clientId, String clientSecret) {
-		OAuth2ProtectedResourceDetails resource = getResourceDetails(username, password, clientId, clientSecret);
+	private OAuth2AccessToken createToken(String authorizationUrl, String username, String password,
+	                                      String clientId, String clientSecret) {
+		OAuth2ProtectedResourceDetails resource = getResourceDetails(authorizationUrl, username, password, clientId, clientSecret);
 		AccessTokenRequest request = createAccessTokenRequest(username, password);
 
 		ResourceOwnerPasswordAccessTokenProvider provider = createResourceOwnerPasswordAccessTokenProvider();
@@ -102,8 +107,10 @@ public class OauthClient {
 		}
 	}
 
-	private OAuth2AccessToken refreshToken(OAuth2AccessToken currentToken, String username, String password, String clientId, String clientSecret) {
-		OAuth2ProtectedResourceDetails resource = getResourceDetails(username, password, clientId, clientSecret);
+	private OAuth2AccessToken refreshToken(OAuth2AccessToken currentToken, String authorizationUrl,
+	                                       String username, String password,
+	                                       String clientId, String clientSecret) {
+		OAuth2ProtectedResourceDetails resource = getResourceDetails(authorizationUrl, username, password, clientId, clientSecret);
 		AccessTokenRequest request = createAccessTokenRequest(username, password);
 
 		ResourceOwnerPasswordAccessTokenProvider provider = createResourceOwnerPasswordAccessTokenProvider();
@@ -126,7 +133,8 @@ public class OauthClient {
 		return request;
 	}
 
-	private OAuth2ProtectedResourceDetails getResourceDetails(String username, String password, String clientId, String clientSecret) {
+	private OAuth2ProtectedResourceDetails getResourceDetails(String authorizationUrl, String username, String password,
+	                                                          String clientId, String clientSecret) {
 		ResourceOwnerPasswordResourceDetails resource = new ResourceOwnerPasswordResourceDetails();
 		resource.setUsername(username);
 		resource.setPassword(password);
@@ -135,8 +143,12 @@ public class OauthClient {
 		resource.setClientSecret(clientSecret);
 		resource.setId(clientId);
 		resource.setClientAuthenticationScheme(AuthenticationScheme.header);
-		resource.setAccessTokenUri(authorizationUrl + "/oauth/token");
+		resource.setAccessTokenUri(authorizationUrl);
 
 		return resource;
+	}
+
+	private String buildAuthorizationEndpoint(String authorizationUrl) {
+		return authorizationUrl + "/oauth/token";
 	}
 }
